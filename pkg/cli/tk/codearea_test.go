@@ -2,6 +2,7 @@ package tk
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"src.elv.sh/pkg/cli/term"
@@ -169,6 +170,113 @@ var codeAreaRenderTests = []renderTest{
 		Want: bb(10).Write("code").SetDotHere(),
 	},
 	{
+		Name: "suggestion shown after the dot",
+		Given: NewCodeArea(CodeAreaSpec{
+			Suggester: suggestCode,
+			State:     CodeAreaState{Buffer: CodeBuffer{Content: "co", Dot: 2}}}),
+		Width: 10, Height: 24,
+		Want: bb(10).Write("co").SetDotHere().WriteStringSGR("de", "90"),
+	},
+	{
+		Name: "suggestion not highlighted",
+		Given: NewCodeArea(CodeAreaSpec{
+			Highlighter: func(code string) (ui.Text, []ui.Text) {
+				return ui.T(code, ui.Bold), nil
+			},
+			Suggester: suggestCode,
+			State:     CodeAreaState{Buffer: CodeBuffer{Content: "co", Dot: 2}}}),
+		Width: 10, Height: 24,
+		Want: bb(10).WriteStringSGR("co", "1").SetDotHere().WriteStringSGR("de", "90"),
+	},
+	{
+		Name: "suggestion shown after the code when dot is not at the end",
+		Given: NewCodeArea(CodeAreaSpec{
+			Suggester: suggestCode,
+			State:     CodeAreaState{Buffer: CodeBuffer{Content: "co", Dot: 1}}}),
+		Width: 10, Height: 24,
+		Want: bb(10).Write("c").SetDotHere().Write("o").WriteStringSGR("de", "90"),
+	},
+	{
+		Name: "suggestion hidden when there is pending code",
+		Given: NewCodeArea(CodeAreaSpec{
+			Suggester: suggestCode,
+			State: CodeAreaState{
+				Buffer:  CodeBuffer{Content: "co", Dot: 2},
+				Pending: PendingCode{From: 2, To: 2, Content: "x"}}}),
+		Width: 10, Height: 24,
+		Want: bb(10).Write("co").WriteStringSGR("x", "4").SetDotHere(),
+	},
+	{
+		Name: "suggestion explicitly hidden",
+		Given: NewCodeArea(CodeAreaSpec{
+			Suggester: suggestCode,
+			State: CodeAreaState{
+				Buffer: CodeBuffer{Content: "co", Dot: 2}, HideSuggestion: true}}),
+		Width: 10, Height: 24,
+		Want: bb(10).Write("co").SetDotHere(),
+	},
+	{
+		Name: "case-insensitive suggestion shows the typed code as is",
+		Given: NewCodeArea(CodeAreaSpec{
+			Suggester: suggestCode,
+			State:     CodeAreaState{Buffer: CodeBuffer{Content: "CO", Dot: 2}}}),
+		Width: 10, Height: 24,
+		Want: bb(10).Write("CO").SetDotHere().WriteStringSGR("de", "90"),
+	},
+	{
+		Name: "suggestion ignored if it doesn't extend the code",
+		Given: NewCodeArea(CodeAreaSpec{
+			Suggester: func(string) string { return "other" },
+			State:     CodeAreaState{Buffer: CodeBuffer{Content: "co", Dot: 2}}}),
+		Width: 10, Height: 24,
+		Want: bb(10).Write("co").SetDotHere(),
+	},
+	{
+		Name: "suggestion not requested for empty buffer",
+		Given: NewCodeArea(CodeAreaSpec{
+			Suggester: func(string) string { return "nope" }}),
+		Width: 10, Height: 24,
+		Want: bb(10).SetDotHere(),
+	},
+	{
+		Name: "suggestion wraps and is indented like code",
+		Given: NewCodeArea(CodeAreaSpec{
+			Prompt:    p(ui.T("~>")),
+			Suggester: func(string) string { return "code more text" },
+			State:     CodeAreaState{Buffer: CodeBuffer{Content: "code", Dot: 4}}}),
+		Width: 10, Height: 24,
+		Want: bb(10).Write("~>code").SetDotHere().WriteStringSGR(" mor", "90").
+			Newline().Write("  ").WriteStringSGR("e text", "90"),
+	},
+	{
+		Name: "multi-line suggestion",
+		Given: NewCodeArea(CodeAreaSpec{
+			Suggester: func(string) string { return "code\nmore" },
+			State:     CodeAreaState{Buffer: CodeBuffer{Content: "code", Dot: 4}}}),
+		Width: 10, Height: 24,
+		Want: bb(10).Write("code").SetDotHere().Newline().WriteStringSGR("more", "90"),
+	},
+	{
+		Name: "suggestion before rprompt",
+		Given: NewCodeArea(CodeAreaSpec{
+			Prompt:    p(ui.T("~>")),
+			RPrompt:   p(ui.T("RP")),
+			Suggester: func(string) string { return "codex" },
+			State:     CodeAreaState{Buffer: CodeBuffer{Content: "code", Dot: 4}}}),
+		Width: 10, Height: 24,
+		Want: bb(10).Write("~>code").SetDotHere().WriteStringSGR("x", "90").Write(" RP"),
+	},
+	{
+		Name: "rprompt hidden when suggestion leaves no room",
+		Given: NewCodeArea(CodeAreaSpec{
+			Prompt:    p(ui.T("~>")),
+			RPrompt:   p(ui.T("RP")),
+			Suggester: func(string) string { return "codexy" },
+			State:     CodeAreaState{Buffer: CodeBuffer{Content: "code", Dot: 4}}}),
+		Width: 10, Height: 24,
+		Want: bb(10).Write("~>code").SetDotHere().WriteStringSGR("xy", "90"),
+	},
+	{
 		Name: "prioritize lines before the cursor with small height",
 		Given: NewCodeArea(CodeAreaSpec{State: CodeAreaState{
 			Buffer: CodeBuffer{Content: "a\nb\nc\nd", Dot: 3},
@@ -195,8 +303,87 @@ var codeAreaRenderTests = []renderTest{
 	},
 }
 
+// A Suggester that suggests "code" when the code is a case-insensitive prefix
+// of it.
+func suggestCode(code string) string {
+	if len(code) <= len("code") && strings.EqualFold("code"[:len(code)], code) {
+		return "code"
+	}
+	return ""
+}
+
 func TestCodeArea_Render(t *testing.T) {
 	testRender(t, codeAreaRenderTests)
+}
+
+func TestCodeArea_AcceptSuggestion(t *testing.T) {
+	acceptAll := func(full string, dot int) int { return len(full) }
+	acceptOne := func(full string, dot int) int { return dot + 1 }
+
+	newWidget := func(buf CodeBuffer) CodeArea {
+		return NewCodeArea(CodeAreaSpec{
+			Suggester: suggestCode, State: CodeAreaState{Buffer: buf}})
+	}
+	testAccept := func(t *testing.T, w CodeArea, upTo func(string, int) int, wantAccepted bool, wantBuf CodeBuffer) {
+		t.Helper()
+		if accepted := w.AcceptSuggestion(upTo); accepted != wantAccepted {
+			t.Errorf("got accepted %v, want %v", accepted, wantAccepted)
+		}
+		if buf := w.CopyState().Buffer; buf != wantBuf {
+			t.Errorf("got buffer %v, want %v", buf, wantBuf)
+		}
+	}
+
+	t.Run("accept all after render", func(t *testing.T) {
+		w := newWidget(CodeBuffer{Content: "co", Dot: 2})
+		w.Render(10, 24)
+		testAccept(t, w, acceptAll, true, CodeBuffer{Content: "code", Dot: 4})
+		// Accepting again is a no-op until the next render.
+		testAccept(t, w, acceptAll, false, CodeBuffer{Content: "code", Dot: 4})
+	})
+	t.Run("accept all corrects case of typed code", func(t *testing.T) {
+		w := newWidget(CodeBuffer{Content: "CO", Dot: 2})
+		w.Render(10, 24)
+		testAccept(t, w, acceptAll, true, CodeBuffer{Content: "code", Dot: 4})
+	})
+	t.Run("accept part after render", func(t *testing.T) {
+		w := newWidget(CodeBuffer{Content: "co", Dot: 2})
+		w.Render(10, 24)
+		testAccept(t, w, acceptOne, true, CodeBuffer{Content: "cod", Dot: 3})
+	})
+	t.Run("accept part keeps case of typed code", func(t *testing.T) {
+		w := newWidget(CodeBuffer{Content: "CO", Dot: 2})
+		w.Render(10, 24)
+		testAccept(t, w, acceptOne, true, CodeBuffer{Content: "COd", Dot: 3})
+	})
+	t.Run("accept with dot not at the end", func(t *testing.T) {
+		w := newWidget(CodeBuffer{Content: "co", Dot: 1})
+		w.Render(10, 24)
+		testAccept(t, w, acceptAll, true, CodeBuffer{Content: "code", Dot: 4})
+	})
+	t.Run("no-op before any render", func(t *testing.T) {
+		w := newWidget(CodeBuffer{Content: "co", Dot: 2})
+		testAccept(t, w, acceptAll, false, CodeBuffer{Content: "co", Dot: 2})
+	})
+	t.Run("no-op when buffer changed since render", func(t *testing.T) {
+		w := newWidget(CodeBuffer{Content: "co", Dot: 2})
+		w.Render(10, 24)
+		w.MutateState(func(s *CodeAreaState) { s.Buffer.InsertAtDot("x") })
+		testAccept(t, w, acceptAll, false, CodeBuffer{Content: "cox", Dot: 3})
+	})
+	t.Run("no-op when suggestion was hidden in render", func(t *testing.T) {
+		w := newWidget(CodeBuffer{Content: "co", Dot: 2})
+		w.Render(10, 24)
+		w.MutateState(func(s *CodeAreaState) { s.HideSuggestion = true })
+		w.Render(10, 24)
+		testAccept(t, w, acceptAll, false, CodeBuffer{Content: "co", Dot: 2})
+	})
+	t.Run("no-op when upTo does not move forward", func(t *testing.T) {
+		w := newWidget(CodeBuffer{Content: "co", Dot: 2})
+		w.Render(10, 24)
+		testAccept(t, w, func(string, int) int { return 2 }, false, CodeBuffer{Content: "co", Dot: 2})
+		testAccept(t, w, func(string, int) int { return 5 }, false, CodeBuffer{Content: "co", Dot: 2})
+	})
 }
 
 var codeAreaHandleTests = []handleTest{

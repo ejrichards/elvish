@@ -244,6 +244,61 @@ func withHighlighter(hl Highlighter) func(*AppSpec, TTYCtrl) {
 	return WithSpec(func(spec *AppSpec) { spec.Highlighter = hl })
 }
 
+func TestReadCode_ShowsSuggestion_ExceptInFinalRedraw(t *testing.T) {
+	f := Setup(withSuggester(testSuggester{get: suggestMore}))
+	defer f.Stop()
+
+	feedInput(f.TTY, "code")
+	f.TTY.TestBuffer(t, bb().Write("code").SetDotHere().Write(" more", ui.FgBrightBlack).Buffer())
+
+	feedInput(f.TTY, "\n")
+	f.TestTTY(t, "code", "\n", term.DotHere)
+}
+
+func TestReadCode_RedrawsOnLateUpdateFromSuggester(t *testing.T) {
+	suggestion := ""
+	sg := testSuggester{
+		get:         func(code string) string { return suggestion },
+		lateUpdates: make(chan struct{}),
+	}
+	f := Setup(withSuggester(sg))
+	defer f.Stop()
+
+	feedInput(f.TTY, "code")
+	f.TTY.TestBuffer(t, bb().Write("code").SetDotHere().Buffer())
+
+	suggestion = "code more"
+	sg.lateUpdates <- struct{}{}
+	f.TTY.TestBuffer(t, bb().Write("code").SetDotHere().Write(" more", ui.FgBrightBlack).Buffer())
+}
+
+func TestReadCode_HidesSuggestionWhenAddonIsActive(t *testing.T) {
+	f := Setup(withSuggester(testSuggester{get: suggestMore}))
+	defer f.Stop()
+
+	feedInput(f.TTY, "code")
+	f.TTY.TestBuffer(t, bb().Write("code").SetDotHere().Write(" more", ui.FgBrightBlack).Buffer())
+
+	f.App.PushAddon(tk.Label{Content: ui.T("addon")})
+	f.App.Redraw()
+	f.TTY.TestBuffer(t, bb().Write("code").Newline().SetDotHere().Write("addon").Buffer())
+
+	f.App.PopAddon()
+	f.App.Redraw()
+	f.TTY.TestBuffer(t, bb().Write("code").SetDotHere().Write(" more", ui.FgBrightBlack).Buffer())
+}
+
+func suggestMore(code string) string {
+	if code == "code" {
+		return "code more"
+	}
+	return ""
+}
+
+func withSuggester(sg Suggester) func(*AppSpec, TTYCtrl) {
+	return WithSpec(func(spec *AppSpec) { spec.Suggester = sg })
+}
+
 func TestReadCode_ShowsPrompt(t *testing.T) {
 	f := Setup(WithSpec(func(spec *AppSpec) {
 		spec.Prompt = NewConstPrompt(ui.T("> "))
@@ -605,6 +660,15 @@ func (hl testHighlighter) Get(code string) (ui.Text, []ui.Text) {
 func (hl testHighlighter) LateUpdates() <-chan struct{} {
 	return hl.lateUpdates
 }
+
+type testSuggester struct {
+	get         func(code string) string
+	lateUpdates chan struct{}
+}
+
+func (sg testSuggester) Get(code string) string { return sg.get(code) }
+
+func (sg testSuggester) LateUpdates() <-chan struct{} { return sg.lateUpdates }
 
 // A Prompt implementation useful for testing.
 type testPrompt struct {

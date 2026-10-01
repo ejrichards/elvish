@@ -22,6 +22,16 @@ type CodeArea interface {
 	MutateState(f func(*CodeAreaState))
 	// Submit triggers the OnSubmit callback.
 	Submit()
+	// AcceptSuggestion accepts the suggestion shown in the last render, up to
+	// the position returned by upTo, which is called with the suggested full
+	// code and the length of the buffer content. If the whole suggestion is
+	// accepted, the buffer is replaced by the suggestion, which may correct
+	// the case of the typed code; otherwise the accepted part is appended
+	// to the buffer. The dot is moved to the end. It returns whether anything
+	// was accepted. Nothing is accepted if no suggestion was shown, if the
+	// buffer has changed since the last render, or if upTo does not move
+	// forward.
+	AcceptSuggestion(upTo func(full string, from int) int) bool
 }
 
 // CodeAreaSpec specifies the configuration and initial state for CodeArea.
@@ -32,6 +42,16 @@ type CodeAreaSpec struct {
 	// found, such as errors and autofixes. If this function is not given, the
 	// Widget does not highlight the code nor show any tips.
 	Highlighter func(code string) (ui.Text, []ui.Text)
+	// A function that returns a suggestion for the given code, like the
+	// autosuggestion feature of the Fish shell. The return value is the
+	// suggested full code, which must be longer than the given code and have
+	// it as a prefix (compared case-insensitively); the part after the prefix
+	// is shown after the code in a different style. Accepting the whole
+	// suggestion replaces the code with the suggestion, which may correct the
+	// case of the typed code. It is only called when there is no pending
+	// code. If this function is not given, the Widget does not show
+	// suggestions.
+	Suggester func(code string) string
 	// Prompt callback.
 	Prompt func() ui.Text
 	// Right-prompt callback.
@@ -55,10 +75,11 @@ type CodeAreaSpec struct {
 
 // CodeAreaState keeps the mutable state of the CodeArea widget.
 type CodeAreaState struct {
-	Buffer      CodeBuffer
-	Pending     PendingCode
-	HideRPrompt bool
-	HideTips    bool
+	Buffer         CodeBuffer
+	Pending        PendingCode
+	HideRPrompt    bool
+	HideTips       bool
+	HideSuggestion bool
 }
 
 // CodeBuffer represents the buffer of the CodeArea widget.
@@ -110,6 +131,14 @@ type codeArea struct {
 	pasting bool
 	// Buffer for keeping Pasted text during bracketed pasting.
 	pasteBuffer bytes.Buffer
+
+	// Mutex for synchronizing access to shownFor and shown.
+	shownMutex sync.Mutex
+	// Value of State.Buffer when the suggestion was last rendered.
+	shownFor CodeBuffer
+	// The suggested full code that was last rendered; empty if none was
+	// shown.
+	shown string
 }
 
 // NewCodeArea creates a new CodeArea from the given spec.
@@ -119,6 +148,9 @@ func NewCodeArea(spec CodeAreaSpec) CodeArea {
 	}
 	if spec.Highlighter == nil {
 		spec.Highlighter = func(s string) (ui.Text, []ui.Text) { return ui.T(s), nil }
+	}
+	if spec.Suggester == nil {
+		spec.Suggester = func(string) string { return "" }
 	}
 	if spec.Prompt == nil {
 		spec.Prompt = func() ui.Text { return nil }
@@ -190,6 +222,48 @@ func (w *codeArea) CopyState() CodeAreaState {
 	w.StateMutex.RLock()
 	defer w.StateMutex.RUnlock()
 	return w.State
+}
+
+func (w *codeArea) AcceptSuggestion(upTo func(full string, dot int) int) bool {
+	w.StateMutex.Lock()
+	defer w.StateMutex.Unlock()
+	w.shownMutex.Lock()
+	shownFor, shown := w.shownFor, w.shown
+	w.shownMutex.Unlock()
+
+	if shown == "" || w.State.Buffer != shownFor || w.State.Pending != (PendingCode{}) {
+		return false
+	}
+	content := w.State.Buffer.Content
+	from := len(content)
+	to := upTo(shown, from)
+	if to <= from || to > len(shown) {
+		return false
+	}
+	if to == len(shown) {
+		// Accepting the whole suggestion also corrects the case of the typed
+		// code, if the suggestion matched case-insensitively.
+		content = shown
+	} else {
+		content += shown[from:to]
+	}
+	w.State.Buffer = CodeBuffer{Content: content, Dot: len(content)}
+	return true
+}
+
+// Returns the part of the suggested full code to show after the code, or ""
+// if the suggestion is not valid for the code.
+func suggestionSuffix(code, full string) string {
+	if len(full) <= len(code) || !strings.EqualFold(full[:len(code)], code) {
+		return ""
+	}
+	return full[len(code):]
+}
+
+func (w *codeArea) setShownSuggestion(buf CodeBuffer, sug string) {
+	w.shownMutex.Lock()
+	defer w.shownMutex.Unlock()
+	w.shownFor, w.shown = buf, sug
 }
 
 func (w *codeArea) resetInserts() {

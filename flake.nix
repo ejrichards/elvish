@@ -2,7 +2,7 @@
   description = "elvish";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     gomod2nix = {
       url = "github:nix-community/gomod2nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -21,6 +21,21 @@
         inherit system;
         pkgs = import nixpkgs { inherit system; };
       });
+
+      # Nix builds from a source archive without the .git directory, so Go's
+      # VCS stamping does not work and the version would be "0.x.0-dev.unknown".
+      # Supply the same "$time-$commit" string via buildinfo.VCSOverride instead.
+      rev = self.rev or self.dirtyRev or "unknown";
+      vcsOverride = "${self.lastModifiedDate or "19700101000000"}-${builtins.substring 0 12 rev}";
+
+      # Mirror the version string that buildinfo.devVersion produces, so that
+      # the store path name (and tools like nvd) show the same version as
+      # "elvish -version". VersionBase is read from the Go source to keep the
+      # two in sync.
+      versionBase = builtins.elemAt
+        (builtins.match ".*const VersionBase = \"([^\"]+)\".*"
+          (builtins.readFile ./pkg/buildinfo/buildinfo.go)) 0;
+      version = "${versionBase}-dev.0.${vcsOverride}";
     in
     {
       packages = forAllSystems ({ system, pkgs, ... }:
@@ -31,9 +46,10 @@
           default = elvish;
 
           elvish = buildGoApplication {
-            name = "elvish";
+            pname = "elvish";
+            inherit version;
             src = ./.;
-            go = pkgs.go_1_22;
+            go = pkgs.go;
             pwd = ./.;
             subPackages = [ "cmd/elvish" ];
             CGO_ENABLED = 0;
@@ -44,7 +60,20 @@
               "-s"
               "-w"
               "-extldflags -static"
+              "-X src.elv.sh/pkg/buildinfo.VCSOverride=${vcsOverride}"
+              "-X src.elv.sh/pkg/buildinfo.BuildVariant=nix"
             ];
+
+            # Allows `users.users.<name>.shell = pkgs.elvish;` in NixOS.
+            passthru.shellPath = "/bin/elvish";
+
+            meta = with pkgs.lib; {
+              description = "Expressive programming language and versatile interactive shell";
+              homepage = "https://elv.sh/";
+              license = licenses.bsd2;
+              mainProgram = "elvish";
+              platforms = platforms.unix;
+            };
           };
         });
 
@@ -55,7 +84,7 @@
       devShell = forAllSystems ({ system, pkgs }:
         pkgs.mkShell {
           buildInputs = with pkgs; [
-            go_1_22
+            go
             gomod2nix.legacyPackages.${system}.gomod2nix
             gopls
           ];

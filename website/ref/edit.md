@@ -555,3 +555,37 @@ ref/edit/autofix
 As seen above, autofixes are also applied automatically by
 [`edit:completion:smart-start`]() (the default binding for <kbd>Tab</kbd>) and
 [`edit:smart-enter`]() (the default binding for <kbd>Enter</kbd>).
+
+## Autosuggestion
+
+As you type, the editor shows an **autosuggestion** after the cursor in a dimmed
+style. This is similar to the autosuggestion feature of the Fish shell.
+
+The suggestion comes from two sources. The command history is tried first: the
+most recent command that starts with what you have typed so far is suggested.
+For example, if you have previously run `git commit -m 'fix the thing'`, typing
+`git c` will show the rest of that command after the cursor. History entries are
+only suggested if they still look runnable: the commands must still exist, the
+argument of `cd` must be an existing directory other than the current one, and
+arguments that look like paths (containing `/`, or starting with `~` or `.`)
+must still exist. If the history has nothing to suggest, the first
+[completion](#completion-api) candidate is suggested instead, so typing `cd Doc`
+will show `uments/` if that directory exists. Finally, a history entry that
+matches only when ignoring case is used as a last resort; accepting it corrects
+the case of what you have typed.
+
+The suggestion is only shown when no mode is active. With the cursor at the end
+of the buffer, press <kbd>Right</kbd> (bound to [`edit:move-dot-right`]() by
+default) to accept the whole suggestion, <kbd>End</kbd> (bound to
+[`edit:move-dot-eol`]()) to accept its first line, or <kbd>Alt-f</kbd> (bound to
+[`edit:move-dot-right-word`]()) to accept just its next word. Keep typing to
+ignore it; like in Fish, deleting characters hides the suggestion until you type
+again. Suggestions can also be accepted explicitly with
+[`edit:autosuggestion:accept`]() and [`edit:autosuggestion:accept-word`](),
+which can be bound to other keys and work with the cursor anywhere.
+
+To turn off autosuggestions, add the following to your `rc.elv`:
+
+```elvish
+set edit:autosuggestion:enabled = $false
+```

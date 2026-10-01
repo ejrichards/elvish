@@ -14,6 +14,7 @@ type AppSpec struct {
 	AfterReadline     []func(string)
 
 	Highlighter Highlighter
+	Suggester   Suggester
 	Prompt      Prompt
 	RPrompt     Prompt
 
@@ -46,6 +47,26 @@ func (dummyHighlighter) Get(code string) (ui.Text, []ui.Text) {
 }
 
 func (dummyHighlighter) LateUpdates() <-chan struct{} { return nil }
+
+// Suggester represents a source of suggestions for the code, shown after the
+// code like the autosuggestion feature of the Fish shell. The result can be
+// delivered asynchronously.
+type Suggester interface {
+	// Get returns a suggestion for the given code: the suggested full code,
+	// which must have the given code as a prefix (compared
+	// case-insensitively). It returns an empty string if there is no
+	// suggestion (yet).
+	Get(code string) string
+	// LateUpdates returns a channel for delivering late updates.
+	LateUpdates() <-chan struct{}
+}
+
+// A Suggester implementation that never suggests anything.
+type dummySuggester struct{}
+
+func (dummySuggester) Get(code string) string { return "" }
+
+func (dummySuggester) LateUpdates() <-chan struct{} { return nil }
 
 // Prompt represents a prompt whose result can be delivered asynchronously.
 type Prompt interface {

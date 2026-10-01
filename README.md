@@ -1,3 +1,5 @@
+# WARNING: This branch is 100% **vibe coded** use or look at your own risk
+
 # Elvish
 
 [![CI status](https://github.com/elves/elvish/workflows/CI/badge.svg)](https://github.com/elves/elvish/actions?query=workflow%3ACI)

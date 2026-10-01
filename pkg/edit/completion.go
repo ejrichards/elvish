@@ -121,6 +121,9 @@ func initCompletion(ed *Editor, ev *eval.Evaler, nb eval.NsBuilder) {
 	generateForSudo := func(args []string) ([]complete.RawItem, error) {
 		return complete.GenerateForSudo(args, ev, cfg())
 	}
+	// Autosuggestions fall back to completions when the history has nothing
+	// to suggest.
+	ed.suggester.setCompleteCfg(cfg)
 	nb.AddGoFns(map[string]any{
 		"complete-filename": wrapArgGenerator(complete.GenerateFileNames),
 		"complete-dirname":  wrapArgGenerator(complete.GenerateDirNames),

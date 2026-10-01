@@ -70,6 +70,7 @@ type app struct {
 	BeforeReadline    []func()
 	AfterReadline     []func(string)
 	Highlighter       Highlighter
+	Suggester         Suggester
 	Prompt            Prompt
 	RPrompt           Prompt
 	GlobalBindings    tk.Bindings
@@ -100,6 +101,7 @@ func NewApp(spec AppSpec) App {
 		BeforeReadline:    spec.BeforeReadline,
 		AfterReadline:     spec.AfterReadline,
 		Highlighter:       spec.Highlighter,
+		Suggester:         spec.Suggester,
 		Prompt:            spec.Prompt,
 		RPrompt:           spec.RPrompt,
 		GlobalBindings:    spec.GlobalBindings,
@@ -117,6 +119,9 @@ func NewApp(spec AppSpec) App {
 	if a.Highlighter == nil {
 		a.Highlighter = dummyHighlighter{}
 	}
+	if a.Suggester == nil {
+		a.Suggester = dummySuggester{}
+	}
 	if a.Prompt == nil {
 		a.Prompt = NewConstPrompt(nil)
 	}
@@ -132,6 +137,7 @@ func NewApp(spec AppSpec) App {
 	a.codeArea = tk.NewCodeArea(tk.CodeAreaSpec{
 		Bindings:    spec.CodeAreaBindings,
 		Highlighter: a.Highlighter.Get,
+		Suggester:   a.Suggester.Get,
 		Prompt:      a.Prompt.Get,
 		RPrompt:     a.RPrompt.Get,
 		QuotePaste:  spec.QuotePaste,
@@ -262,6 +268,13 @@ func (a *app) redraw(flag redrawFlag) {
 
 	mergedNotes := mergeNotes(notes)
 	isFinalRedraw := flag&finalRedraw != 0
+	// Suggestions are only shown when there is no addon: Elvish's modes own
+	// the keys that would accept a suggestion, and hiding it keeps the
+	// suggestion from taking up height that the addon could use.
+	hideSuggestion := isFinalRedraw || len(addons) > 0
+	a.codeArea.MutateState(func(s *tk.CodeAreaState) {
+		s.HideSuggestion = hideSuggestion
+	})
 	if isFinalRedraw {
 		hideRPrompt := !a.RPromptPersistent()
 		a.codeArea.MutateState(func(s *tk.CodeAreaState) {
@@ -272,6 +285,7 @@ func (a *app) redraw(flag redrawFlag) {
 		a.codeArea.MutateState(func(s *tk.CodeAreaState) {
 			s.HideTips = false
 			s.HideRPrompt = false
+			s.HideSuggestion = false
 		})
 		// Insert a newline after the buffer and position the cursor there. Do
 		// this with a Buffer that has one empty line.
@@ -454,7 +468,7 @@ func (a *app) ReadCode() (string, error) {
 		wg.Done()
 	}()
 
-	// Relay late updates from prompt, rprompt and highlighter.
+	// Relay late updates from prompt, rprompt, highlighter and suggester.
 	stopRelayLateUpdates := make(chan struct{})
 	defer close(stopRelayLateUpdates)
 	relayLateUpdates := func(ch <-chan struct{}) {
@@ -478,6 +492,7 @@ func (a *app) ReadCode() (string, error) {
 	relayLateUpdates(a.Prompt.LateUpdates())
 	relayLateUpdates(a.RPrompt.LateUpdates())
 	relayLateUpdates(a.Highlighter.LateUpdates())
+	relayLateUpdates(a.Suggester.LateUpdates())
 
 	// Trigger an initial prompt update.
 	a.triggerPrompts(true)

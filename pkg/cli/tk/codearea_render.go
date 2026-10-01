@@ -8,14 +8,18 @@ import (
 
 // View model, calculated from State and used for rendering.
 type view struct {
-	prompt  ui.Text
-	rprompt ui.Text
-	code    ui.Text
-	dot     int
-	tips    []ui.Text
+	prompt     ui.Text
+	rprompt    ui.Text
+	code       ui.Text
+	dot        int
+	suggestion ui.Text
+	tips       []ui.Text
 }
 
-var stylingForPending = ui.Underlined
+var (
+	stylingForPending    = ui.Underlined
+	stylingForSuggestion = ui.FgBrightBlack
+)
 
 func getView(w *codeArea) *view {
 	s := w.CopyState()
@@ -31,12 +35,31 @@ func getView(w *codeArea) *view {
 		styledCode = ui.Concat(parts[0], pending, parts[2])
 	}
 
+	// Suggestions are only shown when there is no pending code. The
+	// suggestion is computed from the real buffer (not the one patched with
+	// pending code), and is not highlighted.
+	full, suffix := "", ""
+	if !s.HideSuggestion && s.Pending == (PendingCode{}) && s.Buffer.Content != "" {
+		full = w.Suggester(s.Buffer.Content)
+		suffix = suggestionSuffix(s.Buffer.Content, full)
+		if suffix == "" {
+			full = ""
+		}
+	}
+	// Always record what was shown, so that a stale suggestion can't be
+	// accepted after the buffer has changed or the suggestion was hidden.
+	w.setShownSuggestion(s.Buffer, full)
+	var suggestion ui.Text
+	if suffix != "" {
+		suggestion = ui.T(suffix, stylingForSuggestion)
+	}
+
 	var rprompt ui.Text
 	if !s.HideRPrompt {
 		rprompt = w.RPrompt()
 	}
 
-	return &view{w.Prompt(), rprompt, styledCode, code.Dot, errors}
+	return &view{w.Prompt(), rprompt, styledCode, code.Dot, suggestion, errors}
 }
 
 func patchPending(c CodeBuffer, p PendingCode) (CodeBuffer, int, int) {
@@ -76,7 +99,11 @@ func renderView(v *view, buf *term.BufferBuilder) {
 	buf.
 		WriteStyled(parts[0]).
 		SetDotHere().
-		WriteStyled(parts[1])
+		WriteStyled(parts[1]).
+		// The suggestion is written like code, so it wraps and is indented
+		// like code, but it is written after all the code so the cursor stays
+		// within the actual code.
+		WriteStyled(v.suggestion)
 
 	buf.EagerWrap = false
 	buf.Indent = 0

@@ -6,8 +6,9 @@ fn move-dot-left { }
 # the buffer.
 fn kill-rune-left { }
 
-# Moves the dot right one rune. Does nothing if the dot is at the end of the
-# buffer.
+# Moves the dot right one rune. If the dot is at the end of the buffer and an
+# [autosuggestion](#autosuggestion) is shown, accepts the whole suggestion
+# instead. Does nothing otherwise if the dot is at the end of the buffer.
 fn move-dot-right { }
 
 # Kills one rune right of the dot. Does nothing if the dot is at the end of the
@@ -20,7 +21,9 @@ fn move-dot-sol { }
 # Deletes the text between the dot and the start of the current line.
 fn kill-line-left { }
 
-# Moves the dot to the end of the current line.
+# Moves the dot to the end of the current line. If the dot is at the end of the
+# buffer and an [autosuggestion](#autosuggestion) is shown, accepts the
+# suggestion up to the end of its first line instead.
 fn move-dot-eol { }
 
 # Deletes the text between the dot and the end of the current line.
@@ -45,7 +48,9 @@ fn move-dot-left-word { }
 # Deletes the last word to the left of the dot.
 fn kill-word-left { }
 
-# Moves the dot to the beginning of the first word to the right of the dot.
+# Moves the dot to the beginning of the first word to the right of the dot. If
+# the dot is at the end of the buffer and an [autosuggestion](#autosuggestion)
+# is shown, accepts the suggestion up to the end of its first word instead.
 fn move-dot-right-word { }
 
 # Deletes the first word to the right of the dot.
@@ -63,6 +68,9 @@ fn move-dot-left-small-word { }
 fn kill-small-word-left { }
 
 # Moves the dot to the beginning of the first small word to the right of the dot.
+# If the dot is at the end of the buffer and an
+# [autosuggestion](#autosuggestion) is shown, accepts the suggestion up to the
+# end of its first small word instead.
 fn move-dot-right-small-word { }
 
 # Deletes the first small word to the right of the dot.
@@ -80,6 +88,9 @@ fn move-dot-left-alnum-word { }
 fn kill-alnum-word-left { }
 
 # Moves the dot to the beginning of the first alnum word to the right of the dot.
+# If the dot is at the end of the buffer and an
+# [autosuggestion](#autosuggestion) is shown, accepts the suggestion up to the
+# end of its first alnum word instead.
 fn move-dot-right-alnum-word { }
 
 # Deletes the first alnum word to the right of the dot.

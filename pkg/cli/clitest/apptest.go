@@ -24,7 +24,8 @@ var Styles = ui.RuneStylesheet{
 	'v': ui.FgGreen,
 	'V': ui.Stylings(ui.Underlined, ui.FgGreen),
 	'$': ui.FgMagenta,
-	'c': ui.FgCyan, // mnemonic "Comment"
+	'c': ui.FgCyan,        // mnemonic "Comment"
+	'g': ui.FgBrightBlack, // mnemonic "Ghost" (autosuggestion)
 }
 
 // Fixture is a test fixture.

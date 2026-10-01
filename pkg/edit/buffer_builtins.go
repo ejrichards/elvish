@@ -15,12 +15,21 @@ import (
 func initBufferBuiltins(app cli.App, nb eval.NsBuilder) {
 	m := make(map[string]any)
 	for name, fn := range bufferBuiltinsData {
-		// Make a lexically scoped copy of fn.
+		// Make lexically scoped copies of fn and acceptor.
 		fn := fn
+		acceptor := suggestionAcceptors[name]
 		m[name] = func() {
 			codeArea, ok := focusedCodeArea(app)
 			if !ok {
 				return
+			}
+			// Like in Fish, movement keys only accept the suggestion when
+			// the dot is at the end of the buffer.
+			if acceptor != nil {
+				buf := codeArea.CopyState().Buffer
+				if buf.Dot == len(buf.Content) && codeArea.AcceptSuggestion(acceptor) {
+					return
+				}
 			}
 			codeArea.MutateState(func(s *tk.CodeAreaState) {
 				fn(&s.Buffer)
@@ -28,6 +37,19 @@ func initBufferBuiltins(app cli.App, nb eval.NsBuilder) {
 		}
 	}
 	nb.AddGoFns(m)
+}
+
+// Buffer builtins that accept the autosuggestion (fully or partially) when
+// there is one, instead of their usual behavior. This mirrors the Fish shell,
+// where moving right at the end of the buffer accepts the suggestion. The
+// pureMover is applied to the buffer content concatenated with the
+// suggestion, and the suggestion is accepted up to the resulting position.
+var suggestionAcceptors = map[string]pureMover{
+	"move-dot-right":            acceptWhole,
+	"move-dot-eol":              acceptLine,
+	"move-dot-right-word":       acceptWord,
+	"move-dot-right-small-word": acceptSmallWord,
+	"move-dot-right-alnum-word": acceptAlnumWord,
 }
 
 var bufferBuiltinsData = map[string]func(*tk.CodeBuffer){

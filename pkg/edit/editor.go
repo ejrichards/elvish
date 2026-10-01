@@ -33,6 +33,9 @@ type Editor struct {
 	// edit:completion:smart-start to apply the autofix easily. This field is
 	// set in initHighlighter.
 	applyAutofix func()
+	// Set in initAutosuggestion; used by initCompletion to supply the
+	// completion config to the suggester.
+	suggester *suggester
 
 	// Maybe move this to another type that represents the REPL cycle as a whole, not just the
 	// read/edit portion represented by the Editor type.
@@ -69,6 +72,7 @@ func NewEditor(tty cli.TTY, ev *eval.Evaler, st storedefs.Store) *Editor {
 	initGlobalBindings(&appSpec, ed, ev, nb)
 	initInsertAPI(&appSpec, ed, ev, nb)
 	initHighlighter(&appSpec, ed, ev, nb)
+	initAutosuggestion(&appSpec, ed, ev, hs, nb)
 	initPrompts(&appSpec, ed, ev, nb)
 	ed.app = cli.NewApp(appSpec)
 

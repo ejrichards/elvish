@@ -23,6 +23,9 @@ _testmain.go
 
 # Nix
 /result
+/result-*
+/.direnv
+
 # Project specific
 cover
 /_*
