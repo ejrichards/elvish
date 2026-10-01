@@ -14,6 +14,7 @@ import (
 	"src.elv.sh/pkg/parse"
 	"src.elv.sh/pkg/parse/np"
 	"src.elv.sh/pkg/store/storedefs"
+	"src.elv.sh/pkg/ui"
 )
 
 func initAutosuggestion(appSpec *cli.AppSpec, ed *Editor, ev *eval.Evaler, hs *histStore, nb eval.NsBuilder) {
@@ -104,8 +105,9 @@ type suggester struct {
 	lates   chan struct{}
 
 	mu sync.Mutex
-	// Returns the completion config, if completion is available.
-	completeCfg func() complete.Config
+	// Returns the completion config that sends notes to the given sink, if
+	// completion is available.
+	completeCfg func(*hintSink) complete.Config
 	// Generation of the history store when the cache was populated.
 	gen uint64
 	// Whether the cache is populated.
@@ -127,6 +129,11 @@ type suggester struct {
 	savedExact           bool
 	// The snapshot of the history store used by the last lookup.
 	snapshot *histSnapshot
+	// The notes from the completers run by the last finished lookup, and the
+	// code that lookup was for. The hint is kept while the user keeps typing
+	// after hintCode, until the next lookup finishes; this avoids flickering.
+	hint     ui.Text
+	hintCode string
 }
 
 func newSuggester(hs *histStore, ev *eval.Evaler, enabled func() bool) *suggester {
@@ -135,13 +142,27 @@ func newSuggester(hs *histStore, ev *eval.Evaler, enabled func() bool) *suggeste
 		lates: make(chan struct{}, suggesterLatesBufferSize)}
 }
 
-func (s *suggester) setCompleteCfg(cfg func() complete.Config) {
+func (s *suggester) setCompleteCfg(cfg func(*hintSink) complete.Config) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.completeCfg = cfg
 }
 
 func (s *suggester) LateUpdates() <-chan struct{} { return s.lates }
+
+// Hint implements cli.HintSuggester. It returns the notes from the completers
+// run by the last lookup, such as the usage of the argument being typed.
+func (s *suggester) Hint(code string) ui.Text {
+	if code == "" || !s.enabled() {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !strings.HasPrefix(code, s.hintCode) {
+		return nil
+	}
+	return s.hint
+}
 
 func (s *suggester) Get(code string) string {
 	if code == "" || !s.enabled() {
@@ -229,12 +250,13 @@ func (s *suggester) lookup(code string, gen uint64, skipHistory bool) {
 		full, exact = s.fromHistory(code, gen)
 		histNone = full == ""
 	}
+	sink := new(hintSink)
 	if !exact {
 		if s.stale(code, gen) {
 			return
 		}
 		// An exact completion is preferred over an inexact history match.
-		if comp := s.fromCompletion(code); comp != "" {
+		if comp := s.fromCompletion(code, sink); comp != "" {
 			full, exact = comp, true
 		}
 	}
@@ -247,6 +269,7 @@ func (s *suggester) lookup(code string, gen uint64, skipHistory bool) {
 		return
 	}
 	s.full, s.exact, s.done, s.histNone = full, exact, true, histNone
+	s.hint, s.hintCode = sink.text(), code
 	// The channel send below might block, so unlock first.
 	s.mu.Unlock()
 	s.lates <- struct{}{}
@@ -331,8 +354,9 @@ func (s *suggester) getSnapshot() []storedefs.Cmd {
 }
 
 // Finds the first completion candidate for the code, and returns the full
-// code with the candidate inserted, or "" if there is none.
-func (s *suggester) fromCompletion(code string) string {
+// code with the candidate inserted, or "" if there is none. Notes from the
+// completers go to the sink.
+func (s *suggester) fromCompletion(code string, sink *hintSink) string {
 	s.mu.Lock()
 	cfgFn := s.completeCfg
 	s.mu.Unlock()
@@ -347,7 +371,7 @@ func (s *suggester) fromCompletion(code string) string {
 		return ""
 	}
 	result, err := complete.Complete(
-		complete.CodeBuffer{Content: code, Dot: len(code)}, s.ev, cfgFn())
+		complete.CodeBuffer{Content: code, Dot: len(code)}, s.ev, cfgFn(sink))
 	if err != nil || result == nil || len(result.Items) == 0 {
 		return ""
 	}

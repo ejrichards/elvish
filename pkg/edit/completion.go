@@ -110,20 +110,27 @@ func initCompletion(ed *Editor, ev *eval.Evaler, nb eval.NsBuilder) {
 	bindings := newMapBindings(ed, ev, bindingVar)
 	matcherMapVar := newMapVar(vals.EmptyMap)
 	argGeneratorMapVar := newMapVar(vals.EmptyMap)
-	cfg := func() complete.Config {
+	// Returns the completion config. If sink is not nil, completion is run in
+	// the background, and notes go to the sink.
+	cfgWithSink := func(sink *hintSink) complete.Config {
+		var nt notifier = ed
+		if sink != nil {
+			nt = sink
+		}
 		return complete.Config{
 			Filterer: adaptMatcherMap(
-				ed, ev, matcherMapVar.Get().(vals.Map)),
+				nt, ev, sink, matcherMapVar.Get().(vals.Map)),
 			ArgGenerator: adaptArgGeneratorMap(
-				ev, argGeneratorMapVar.Get().(vals.Map)),
+				ev, sink, argGeneratorMapVar.Get().(vals.Map)),
 		}
 	}
+	cfg := func() complete.Config { return cfgWithSink(nil) }
 	generateForSudo := func(args []string) ([]complete.RawItem, error) {
 		return complete.GenerateForSudo(args, ev, cfg())
 	}
 	// Autosuggestions fall back to completions when the history has nothing
 	// to suggest.
-	ed.suggester.setCompleteCfg(cfg)
+	ed.suggester.setCompleteCfg(cfgWithSink)
 	nb.AddGoFns(map[string]any{
 		"complete-filename": wrapArgGenerator(complete.GenerateFileNames),
 		"complete-dirname":  wrapArgGenerator(complete.GenerateDirNames),
@@ -288,7 +295,7 @@ func wrapMatcher(m matcher) wrappedMatcher {
 }
 
 // Adapts $edit:completion:matcher into a Filterer.
-func adaptMatcherMap(nt notifier, ev *eval.Evaler, m vals.Map) complete.Filterer {
+func adaptMatcherMap(nt notifier, ev *eval.Evaler, sink *hintSink, m vals.Map) complete.Filterer {
 	return func(ctxName, seed string, rawItems []complete.RawItem) []complete.RawItem {
 		matcher, ok := lookupFn(m, ctxName)
 		if !ok {
@@ -322,9 +329,9 @@ func adaptMatcherMap(nt notifier, ev *eval.Evaler, m vals.Map) complete.Filterer
 
 		err = ev.Call(matcher,
 			eval.CallCfg{Args: []any{seed}, From: "[editor matcher]"},
-			eval.EvalCfg{Ports: []*eval.Port{
+			eval.EvalCfg{Interrupts: hintSinkContext(sink), Ports: []*eval.Port{
 				// TODO: Supply the Chan component of port 2.
-				{Chan: input, File: eval.DevNull}, port1, {File: os.Stderr}}})
+				{Chan: input, File: eval.DevNull}, port1, {File: hintSinkStderr(sink)}}})
 		outputs := collect()
 
 		if err != nil {
@@ -346,7 +353,7 @@ func adaptMatcherMap(nt notifier, ev *eval.Evaler, m vals.Map) complete.Filterer
 	}
 }
 
-func adaptArgGeneratorMap(ev *eval.Evaler, m vals.Map) complete.ArgGenerator {
+func adaptArgGeneratorMap(ev *eval.Evaler, sink *hintSink, m vals.Map) complete.ArgGenerator {
 	return func(args []string) ([]complete.RawItem, error) {
 		gen, ok := lookupFn(m, args[0])
 		if !ok {
@@ -396,9 +403,9 @@ func adaptArgGeneratorMap(ev *eval.Evaler, m vals.Map) complete.ArgGenerator {
 		}
 		err = ev.Call(gen,
 			eval.CallCfg{Args: argValues, From: "[editor arg generator]"},
-			eval.EvalCfg{Ports: []*eval.Port{
+			eval.EvalCfg{Interrupts: hintSinkContext(sink), Ports: []*eval.Port{
 				// TODO: Supply the Chan component of port 2.
-				nil, port1, {File: os.Stderr}}})
+				nil, port1, {File: hintSinkStderr(sink)}}})
 		done()
 
 		return output, err

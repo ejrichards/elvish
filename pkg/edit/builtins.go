@@ -102,7 +102,7 @@ func toKey(v any) (ui.Key, error) {
 	}
 }
 
-func notify(app cli.App, x any) error {
+func notify(fm *eval.Frame, app cli.App, x any) error {
 	// TODO: De-duplicate with the implementation of the styled builtin.
 	var t ui.Text
 	switch x := x.(type) {
@@ -113,6 +113,12 @@ func notify(app cli.App, x any) error {
 	default:
 		return errs.BadValue{What: "argument to edit:notify",
 			Valid: "string, styled segment or styled text", Actual: vals.Kind(x)}
+	}
+	// Notes from code run by background autosuggestion lookups become the
+	// hint instead, so that they don't repeat on every keystroke.
+	if sink := hintSinkFrom(fm.Context()); sink != nil {
+		sink.add(t)
+		return nil
 	}
 	app.Notify(t)
 	return nil
@@ -178,7 +184,7 @@ func initMiscBuiltins(ed *Editor, nb eval.NsBuilder) {
 		"close-mode":     func() { closeMode(ed.app) },
 		"end-of-history": func() { endOfHistory(ed.app) },
 		"key":            toKey,
-		"notify":         func(x any) error { return notify(ed.app, x) },
+		"notify":         func(fm *eval.Frame, x any) error { return notify(fm, ed.app, x) },
 		"redraw":         func(opts redrawOpts) { redraw(ed.app, opts) },
 		"return-line":    ed.app.CommitCode,
 		"return-eof":     ed.app.CommitEOF,

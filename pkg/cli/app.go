@@ -294,10 +294,35 @@ func (a *app) redraw(flag redrawFlag) {
 		a.TTY.UpdateBuffer(mergedNotes, bufMain, flag&fullRedraw != 0)
 		a.TTY.ResetBuffer()
 	} else {
-		bufMain := renderApp(append([]tk.Widget{a.codeArea}, addons...), width, height)
+		widgets := append([]tk.Widget{a.codeArea}, addons...)
+		// Like suggestions, hints are only shown when there is no addon, in
+		// which case they take the place of one below the code area, so that
+		// the code area doesn't move when they appear. The hint is part of the
+		// main buffer rather than a note, so that it is replaced in place on
+		// every redraw and erased by the final redraw.
+		if hint := a.hint(); len(addons) == 0 && len(hint) > 0 {
+			widgets = append(widgets, hintWidget{tk.Label{Content: hint}})
+		}
+		bufMain := renderApp(widgets, width, height)
 		a.TTY.UpdateBuffer(mergedNotes, bufMain, flag&fullRedraw != 0)
 	}
 }
+
+// Returns the hint from the suggester for the current code, if it provides
+// any.
+func (a *app) hint() ui.Text {
+	hs, ok := a.Suggester.(HintSuggester)
+	if !ok {
+		return nil
+	}
+	return hs.Hint(a.codeArea.CopyState().Buffer.Content)
+}
+
+// A label for showing the hint below the code area. It never has focus, so
+// that the cursor is always placed in the code area.
+type hintWidget struct{ tk.Label }
+
+func (hintWidget) Focus() bool { return false }
 
 // Merges notes, separating them with newlines.
 func mergeNotes(notes []ui.Text) ui.Text {

@@ -210,7 +210,7 @@ func TestSuggester_FallsBackToCompletion(t *testing.T) {
 	testutil.InTempDir(t)
 	testutil.ApplyDir(testutil.Dir{"foo.txt": "", "fop": "", "d": testutil.Dir{}})
 	s := newTestSuggester(t, "echo a", "echo ./foo.txt")
-	s.setCompleteCfg(func() complete.Config { return complete.Config{} })
+	s.setCompleteCfg(func(*hintSink) complete.Config { return complete.Config{} })
 	// Completion is used when the history has no match. Like Tab completion,
 	// a trailing space is included for non-directories.
 	testFreshSuggestion(t, s, "put fo", "put foo.txt ")
@@ -351,6 +351,16 @@ func TestAutosuggestion_ShownWhenDotNotAtEnd(t *testing.T) {
 func TestAutosuggestion_EndAcceptsOneLine(t *testing.T) {
 	f := setupAutosuggestionTest(t, "echo a\necho b")
 	feedInput(f.TTYCtrl, "echo")
+	// Wait for the suggestion, which is looked up asynchronously, before
+	// accepting it.
+	f.TestTTY(t,
+		"~> echo", Styles,
+		"   vvvv", term.DotHere,
+		" a", Styles,
+		"gg", "\n",
+		"   echo b", Styles,
+		"   gggggg",
+	)
 	f.TTYCtrl.Inject(term.K(ui.End))
 	f.TestTTY(t,
 		"~> echo a", Styles,
@@ -615,6 +625,51 @@ func TestAutosuggestion_DotInMiddleRightJustMoves(t *testing.T) {
 		"   vvv", term.DotHere,
 		"o a", Styles,
 		"vgg",
+	)
+}
+
+func TestAutosuggestion_CompleterNotesShownAsHint(t *testing.T) {
+	f := setup(t, rc(
+		`set edit:completion:arg-completer[echo] = {|@args| edit:notify 'usage: msg' }`))
+	feedInput(f.TTYCtrl, "echo x")
+	// Notes from the completer run by the background lookup are shown as the
+	// hint below the code area.
+	f.TestTTY(t,
+		"~> echo x", Styles,
+		"   vvvv  ", term.DotHere, "\n",
+		"usage: msg",
+	)
+	// The hint is replaced in place as the user keeps typing.
+	feedInput(f.TTYCtrl, "y")
+	f.TestTTY(t,
+		"~> echo xy", Styles,
+		"   vvvv   ", term.DotHere, "\n",
+		"usage: msg",
+	)
+	// The notes are not shown as messages. (The history has an empty message
+	// for every redraw.)
+	for _, msg := range f.TTYCtrl.MsgHistory() {
+		if len(msg) > 0 {
+			t.Errorf("got message %q, want none", msg)
+		}
+	}
+}
+
+func TestAutosuggestion_HintClearedWhenCompleterHasNoNotes(t *testing.T) {
+	f := setup(t, rc(
+		`set edit:completion:arg-completer[echo] = {|@args|
+			if (eq $args[-1] x) { edit:notify 'usage: msg' }
+		}`))
+	feedInput(f.TTYCtrl, "echo x")
+	f.TestTTY(t,
+		"~> echo x", Styles,
+		"   vvvv  ", term.DotHere, "\n",
+		"usage: msg",
+	)
+	feedInput(f.TTYCtrl, " y")
+	f.TestTTY(t,
+		"~> echo x y", Styles,
+		"   vvvv    ", term.DotHere,
 	)
 }
 

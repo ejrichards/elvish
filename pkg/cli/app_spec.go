@@ -61,6 +61,15 @@ type Suggester interface {
 	LateUpdates() <-chan struct{}
 }
 
+// HintSuggester is an optional interface a Suggester can implement to also
+// provide a transient hint for the code, such as the usage of the argument
+// being typed. The hint is shown below the code area while editing, replaced in
+// place, and never left in the scrollback.
+type HintSuggester interface {
+	// Hint returns the hint for the given code, or nil if there is none.
+	Hint(code string) ui.Text
+}
+
 // A Suggester implementation that never suggests anything.
 type dummySuggester struct{}
 
