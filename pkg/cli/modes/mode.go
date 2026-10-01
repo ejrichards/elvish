@@ -25,7 +25,7 @@ func FocusedCodeArea(a cli.App) (tk.CodeArea, error) {
 
 // Returns text styled as a modeline.
 func modeLine(content string, space bool) ui.Text {
-	t := ui.T(content, ui.Bold, ui.FgWhite, ui.BgMagenta)
+	t := ui.T(content, ui.Bold, ui.FgBlack, ui.BgGreen)
 	if space {
 		t = ui.Concat(t, ui.T(" "))
 	}

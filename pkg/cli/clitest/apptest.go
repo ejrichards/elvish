@@ -13,7 +13,7 @@ import (
 var Styles = ui.RuneStylesheet{
 	'_': ui.Underlined,
 	'b': ui.Bold,
-	'*': ui.Stylings(ui.Bold, ui.FgWhite, ui.BgMagenta),
+	'*': ui.Stylings(ui.Bold, ui.FgBlack, ui.BgGreen),
 	'+': ui.Inverse,
 	'/': ui.FgBlue,
 	'#': ui.Stylings(ui.Inverse, ui.FgBlue),

@@ -26,10 +26,10 @@ func TestModePrompt(t *testing.T) {
 func testModeLine(t *testing.T, fn any) {
 	tt.Test(t, fn,
 		Args("TEST", false).Rets(
-			ui.T("TEST", ui.Bold, ui.FgWhite, ui.BgMagenta)),
+			ui.T("TEST", ui.Bold, ui.FgBlack, ui.BgGreen)),
 		Args("TEST", true).Rets(
 			ui.Concat(
-				ui.T("TEST", ui.Bold, ui.FgWhite, ui.BgMagenta),
+				ui.T("TEST", ui.Bold, ui.FgBlack, ui.BgGreen),
 				ui.T(" "))),
 	)
 }
