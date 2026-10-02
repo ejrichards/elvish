@@ -57,11 +57,11 @@ type hintSinkKey struct{}
 
 // Returns the context to run user code with: one carrying the sink if it's not
 // nil, or nil to use the default.
-func hintSinkContext(sink *hintSink) context.Context {
+func hintSinkContext(ctx context.Context, sink *hintSink) context.Context {
 	if sink == nil {
-		return nil
+		return ctx
 	}
-	return context.WithValue(context.Background(), hintSinkKey{}, sink)
+	return context.WithValue(ctx, hintSinkKey{}, sink)
 }
 
 // Returns the hintSink carried by the context, or nil.

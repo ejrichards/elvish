@@ -3,6 +3,7 @@ package edit
 import (
 	"src.elv.sh/pkg/cli"
 	"src.elv.sh/pkg/cli/modes"
+	"src.elv.sh/pkg/cli/term"
 	"src.elv.sh/pkg/cli/tk"
 	"src.elv.sh/pkg/eval"
 	"src.elv.sh/pkg/parse"
@@ -26,6 +27,7 @@ func instantStart(app cli.App, ev *eval.Evaler, bindings tk.Bindings) {
 			return nil, err
 		}
 		ctx, done := eval.ListenInterrupts()
+		defer term.SuspendKittyKeyboard()()
 		err = ev.Eval(
 			parse.Source{Name: "[instant]", Code: code},
 			eval.EvalCfg{Ports: []*eval.Port{nil, outPort}, Interrupts: ctx})

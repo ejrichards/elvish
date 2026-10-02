@@ -56,6 +56,15 @@ type MapBindings map[term.Event]func(Widget)
 // Handle handles the event by calling the function corresponding to the event
 // in the map. If there is no corresponding function, it returns false.
 func (m MapBindings) Handle(w Widget, event term.Event) bool {
+	if keys := term.BindingKeys(event); len(keys) > 0 {
+		for _, key := range keys {
+			if fn, ok := m[term.KeyEvent(key)]; ok {
+				fn(w)
+				return true
+			}
+		}
+		return false
+	}
 	fn, ok := m[event]
 	if ok {
 		fn(w)

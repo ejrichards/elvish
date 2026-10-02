@@ -69,6 +69,7 @@ type app struct {
 	RPromptPersistent func() bool
 	BeforeReadline    []func()
 	AfterReadline     []func(string)
+	Interrupt         func()
 	Highlighter       Highlighter
 	Suggester         Suggester
 	Prompt            Prompt
@@ -100,6 +101,7 @@ func NewApp(spec AppSpec) App {
 		RPromptPersistent: spec.RPromptPersistent,
 		BeforeReadline:    spec.BeforeReadline,
 		AfterReadline:     spec.AfterReadline,
+		Interrupt:         spec.Interrupt,
 		Highlighter:       spec.Highlighter,
 		Suggester:         spec.Suggester,
 		Prompt:            spec.Prompt,
@@ -216,6 +218,15 @@ func (a *app) resetAllStates() {
 		func(s *tk.CodeAreaState) { *s = tk.CodeAreaState{} })
 }
 
+func (a *app) interrupt(reset bool) {
+	if a.Interrupt != nil {
+		a.Interrupt()
+	}
+	if reset {
+		a.resetAllStates()
+	}
+}
+
 func (a *app) handle(e event) {
 	switch e := e.(type) {
 	case os.Signal:
@@ -229,18 +240,45 @@ func (a *app) handle(e event) {
 			a.RedrawFull()
 		}
 	case term.Event:
-		target := a.ActiveWidget()
-		handled := target.Handle(e)
-		if !handled {
-			handled = a.GlobalBindings.Handle(target, e)
+		// With kitty disambiguation, Ctrl-C and Ctrl-\ are keys instead of
+		// SIGINT and SIGQUIT. A base-layout Ctrl-C counts too, since the
+		// legacy encoding sends ^C regardless of the active layout.
+		handled, reset := false, false
+		for _, key := range term.BindingKeys(e) {
+			if key == ui.K('C', ui.Ctrl) || key == ui.K('\\', ui.Ctrl) {
+				handled = true
+				reset = key == ui.K('C', ui.Ctrl)
+				a.interrupt(reset)
+				break
+			}
 		}
 		if !handled {
-			if k, ok := e.(term.KeyEvent); ok {
-				a.Notify(ui.T("Unbound key: " + ui.Key(k).String()))
+			target := a.ActiveWidget()
+			// Try each match quality across both scopes before falling back to
+			// defaults and the widget's normal event handling.
+			if keys := term.BindingKeys(e); len(keys) > 1 {
+				for _, key := range keys {
+					candidate := term.BindingKeyEvent{Key: key}
+					handled = target.Handle(candidate) || a.GlobalBindings.Handle(target, candidate)
+					if handled {
+						break
+					}
+				}
+			}
+			if !handled {
+				handled = target.Handle(e)
+			}
+			if !handled {
+				handled = a.GlobalBindings.Handle(target, e)
+			}
+		}
+		if !handled {
+			if k, ok := term.KeyOf(e); ok {
+				a.Notify(ui.T("Unbound key: " + k.String()))
 			}
 		}
 		if !a.loop.HasReturned() {
-			a.triggerPrompts(false)
+			a.triggerPrompts(reset)
 			a.reqRead <- struct{}{}
 		}
 	}

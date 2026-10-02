@@ -130,14 +130,16 @@ func callForStyledText(nt notifier, ev *eval.Evaler, ctx string, fn eval.Callabl
 		return nil
 	}
 	port2, done2 := makeNotifyPort(nt)
+	interrupts, done := eval.ListenInterrupts()
+	defer done()
 
 	err = ev.Call(fn,
 		eval.CallCfg{Args: args, From: "[" + ctx + "]"},
-		eval.EvalCfg{Ports: []*eval.Port{nil, port1, port2}})
+		eval.EvalCfg{Interrupts: interrupts, Ports: []*eval.Port{nil, port1, port2}})
 	done1()
 	done2()
 
-	if err != nil {
+	if err != nil && interrupts.Err() == nil {
 		nt.notifyError(ctx, err)
 	}
 	return result

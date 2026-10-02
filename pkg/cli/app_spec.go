@@ -12,6 +12,9 @@ type AppSpec struct {
 	RPromptPersistent func() bool
 	BeforeReadline    []func()
 	AfterReadline     []func(string)
+	// Interrupt cancels user computations when Ctrl-C or Ctrl-Backslash is
+	// delivered as a key instead of a terminal signal.
+	Interrupt func()
 
 	Highlighter Highlighter
 	Suggester   Suggester

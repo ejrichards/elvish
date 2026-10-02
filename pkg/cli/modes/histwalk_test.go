@@ -75,6 +75,25 @@ func TestHistWalk_FocusedWidgetNotCodeArea(t *testing.T) {
 	})
 }
 
+func TestHistWalk_BindingProbeDoesNotAcceptHistory(t *testing.T) {
+	f := Setup()
+	defer f.Stop()
+	w, err := NewHistwalk(f.App, HistwalkSpec{Store: histutil.NewMemStore("history")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.App.PushAddon(w)
+	if w.Handle(term.BindingKeyEvent{Key: ui.K('Z', ui.Ctrl)}) {
+		t.Fatal("unbound probe was handled")
+	}
+	if f.App.ActiveWidget() != w {
+		t.Fatal("binding probe dismissed history mode")
+	}
+	if got := f.App.FocusedWidget().(tk.CodeArea).CopyState().Buffer.Content; got != "" {
+		t.Fatalf("binding probe accepted history: %q", got)
+	}
+}
+
 func TestHistWalk_NoWalker(t *testing.T) {
 	f := Setup()
 	defer f.Stop()

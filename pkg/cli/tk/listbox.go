@@ -274,14 +274,18 @@ func (w *listBox) Handle(event term.Event) bool {
 		return true
 	}
 
-	switch event {
-	case term.K(ui.Up):
+	key, ok := term.KeyOf(event)
+	if !ok {
+		return false
+	}
+	switch key {
+	case ui.K(ui.Up):
 		w.Select(Prev)
 		return true
-	case term.K(ui.Down):
+	case ui.K(ui.Down):
 		w.Select(Next)
 		return true
-	case term.K(ui.Enter):
+	case ui.K(ui.Enter), ui.K('J', ui.Ctrl), ui.K('M', ui.Ctrl):
 		w.Accept()
 		return true
 	}

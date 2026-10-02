@@ -2,6 +2,7 @@ package edit
 
 import (
 	"errors"
+	"slices"
 	"sort"
 
 	"src.elv.sh/pkg/eval"
@@ -136,11 +137,24 @@ func bindingTips(ns *eval.Ns, binding string, entries ...bindingTipEntry) ui.Tex
 			t = ui.Concat(t, ui.T(" "))
 		}
 		for _, k := range keys {
+			if alias, ok := tipAliasOf[k]; ok && slices.Contains(keys, alias) {
+				continue
+			}
 			t = ui.Concat(t, ui.T(k.String(), ui.Inverse), ui.T(" "))
 		}
 		t = ui.Concat(t, ui.T(entry.text))
 	}
 	return t
+}
+
+// Keys that the default bindings bind the same as another key, since they are
+// conflated in the legacy encoding. They are omitted from binding tips when the
+// other key is also shown.
+var tipAliasOf = map[ui.Key]ui.Key{
+	ui.K('I', ui.Ctrl):           ui.K(ui.Tab),
+	ui.K('J', ui.Ctrl):           ui.K(ui.Enter),
+	ui.K('M', ui.Ctrl):           ui.K(ui.Enter),
+	ui.K(ui.Backspace, ui.Shift): ui.K(ui.Backspace),
 }
 
 func getVar(ns *eval.Ns, qname string) any {

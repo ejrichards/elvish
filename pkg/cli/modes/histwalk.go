@@ -59,6 +59,9 @@ func (w *histwalk) Handle(event term.Event) bool {
 	if handled {
 		return true
 	}
+	if _, ok := event.(term.BindingKeyEvent); ok {
+		return w.attachedTo.Handle(event)
+	}
 	w.attachedTo.MutateState((*tk.CodeAreaState).ApplyPending)
 	w.app.PopAddon()
 	return w.attachedTo.Handle(event)

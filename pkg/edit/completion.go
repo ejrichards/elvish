@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"src.elv.sh/pkg/cli/modes"
+	"src.elv.sh/pkg/cli/term"
 	"src.elv.sh/pkg/cli/tk"
 	"src.elv.sh/pkg/edit/complete"
 	"src.elv.sh/pkg/eval"
@@ -49,7 +50,7 @@ func complexCandidate(fm *eval.Frame, opts complexCandidateOpts, stem string) (c
 	}, nil
 }
 
-func completionStart(ed *Editor, bindings tk.Bindings, ev *eval.Evaler, cfg complete.Config, smart bool) {
+func completionStart(ed *Editor, bindings tk.Bindings, fm *eval.Frame, cfg complete.Config, smart bool) {
 	codeArea, ok := focusedCodeArea(ed.app)
 	if !ok {
 		return
@@ -59,7 +60,10 @@ func completionStart(ed *Editor, bindings tk.Bindings, ev *eval.Evaler, cfg comp
 	}
 	buf := codeArea.CopyState().Buffer
 	result, err := complete.Complete(
-		complete.CodeBuffer{Content: buf.Content, Dot: buf.Dot}, ev, cfg)
+		complete.CodeBuffer{Content: buf.Content, Dot: buf.Dot}, fm.Evaler, cfg)
+	if fm.Context().Err() != nil || eval.Reason(err) == eval.ErrInterrupted {
+		return
+	}
 	if err != nil {
 		ed.app.Notify(modes.ErrorText(err))
 		return
@@ -151,8 +155,8 @@ func initCompletion(ed *Editor, ev *eval.Evaler, nb eval.NsBuilder) {
 			}).
 			AddGoFns(map[string]any{
 				"accept":      func() { listingAccept(app) },
-				"smart-start": func() { completionStart(ed, bindings, ev, cfg(), true) },
-				"start":       func() { completionStart(ed, bindings, ev, cfg(), false) },
+				"smart-start": func(fm *eval.Frame) { completionStart(ed, bindings, fm, cfg(), true) },
+				"start":       func(fm *eval.Frame) { completionStart(ed, bindings, fm, cfg(), false) },
 				"up":          func() { listingUp(app) },
 				"down":        func() { listingDown(app) },
 				"up-cycle":    func() { listingUpCycle(app) },
@@ -305,6 +309,11 @@ func adaptMatcherMap(nt notifier, ev *eval.Evaler, sink *hintSink, m vals.Map) c
 		if matcher == nil {
 			return complete.FilterPrefix(ctxName, seed, rawItems)
 		}
+		ctx, done := eval.ListenInterrupts()
+		defer done()
+		if sink == nil {
+			defer term.SuspendKittyKeyboard()()
+		}
 		input := make(chan any)
 		stopInputFeeder := make(chan struct{})
 		defer close(stopInputFeeder)
@@ -329,10 +338,13 @@ func adaptMatcherMap(nt notifier, ev *eval.Evaler, sink *hintSink, m vals.Map) c
 
 		err = ev.Call(matcher,
 			eval.CallCfg{Args: []any{seed}, From: "[editor matcher]"},
-			eval.EvalCfg{Interrupts: hintSinkContext(sink), Ports: []*eval.Port{
+			eval.EvalCfg{Interrupts: hintSinkContext(ctx, sink), Ports: []*eval.Port{
 				// TODO: Supply the Chan component of port 2.
 				{Chan: input, File: eval.DevNull}, port1, {File: hintSinkStderr(sink)}}})
 		outputs := collect()
+		if ctx.Err() != nil {
+			return nil
+		}
 
 		if err != nil {
 			nt.notifyError("matcher", err)
@@ -361,6 +373,11 @@ func adaptArgGeneratorMap(ev *eval.Evaler, sink *hintSink, m vals.Map) complete.
 		}
 		if gen == nil {
 			return complete.GenerateFileNames(args)
+		}
+		ctx, cancel := eval.ListenInterrupts()
+		defer cancel()
+		if sink == nil {
+			defer term.SuspendKittyKeyboard()()
 		}
 		argValues := make([]any, len(args))
 		for i, arg := range args {
@@ -403,10 +420,13 @@ func adaptArgGeneratorMap(ev *eval.Evaler, sink *hintSink, m vals.Map) complete.
 		}
 		err = ev.Call(gen,
 			eval.CallCfg{Args: argValues, From: "[editor arg generator]"},
-			eval.EvalCfg{Interrupts: hintSinkContext(sink), Ports: []*eval.Port{
+			eval.EvalCfg{Interrupts: hintSinkContext(ctx, sink), Ports: []*eval.Port{
 				// TODO: Supply the Chan component of port 2.
 				nil, port1, {File: hintSinkStderr(sink)}}})
 		done()
+		if ctx.Err() != nil {
+			return nil, eval.ErrInterrupted
+		}
 
 		return output, err
 	}

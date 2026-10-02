@@ -62,7 +62,9 @@ func (w *instant) Handle(event term.Event) bool {
 	if !handled {
 		handled = w.attachedTo.Handle(event)
 	}
-	w.update(false)
+	if _, probing := event.(term.BindingKeyEvent); !probing || handled {
+		w.update(false)
+	}
 	return handled
 }
 

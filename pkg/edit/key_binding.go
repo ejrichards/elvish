@@ -25,15 +25,20 @@ func newMapBindings(nt notifier, ev *eval.Evaler, mapVars ...vars.PtrVar) tk.Bin
 }
 
 func (b mapBindings) Handle(w tk.Widget, e term.Event) bool {
-	k, ok := e.(term.KeyEvent)
-	if !ok {
+	keys := term.BindingKeys(e)
+	if len(keys) == 0 {
 		return false
 	}
 	maps := make([]bindingsMap, len(b.mapVars))
 	for i, v := range b.mapVars {
 		maps[i] = v.GetRaw().(bindingsMap)
 	}
-	f := indexLayeredBindings(ui.Key(k), maps...)
+	var f eval.Callable
+	if _, explicitOnly := e.(term.BindingKeyEvent); explicitOnly {
+		f = indexExplicitBindings(keys, maps...)
+	} else {
+		f = indexLayeredBindings(keys, maps...)
+	}
 	if f == nil {
 		return false
 	}
@@ -43,15 +48,21 @@ func (b mapBindings) Handle(w tk.Widget, e term.Event) bool {
 
 // Indexes a series of layered bindings. Returns nil if none of the bindings
 // have the required key or a default.
-func indexLayeredBindings(k ui.Key, maps ...bindingsMap) eval.Callable {
-	for _, m := range maps {
-		if m.HasKey(k) {
-			return m.GetKey(k)
-		}
+func indexLayeredBindings(keys []ui.Key, maps ...bindingsMap) eval.Callable {
+	// An active-layout binding wins over a base-layout binding, even when
+	// the latter is in a higher layer. Defaults are tried only afterward.
+	if f := indexExplicitBindings(keys, maps...); f != nil {
+		return f
 	}
-	for _, m := range maps {
-		if m.HasKey(ui.DefaultKey) {
-			return m.GetKey(ui.DefaultKey)
+	return indexExplicitBindings([]ui.Key{ui.DefaultKey}, maps...)
+}
+
+func indexExplicitBindings(keys []ui.Key, maps ...bindingsMap) eval.Callable {
+	for _, k := range keys {
+		for _, m := range maps {
+			if m.HasKey(k) {
+				return m.GetKey(k)
+			}
 		}
 	}
 	return nil
@@ -60,11 +71,14 @@ func indexLayeredBindings(k ui.Key, maps ...bindingsMap) eval.Callable {
 func callWithNotifyPorts(nt notifier, ev *eval.Evaler, f eval.Callable, args ...any) {
 	notifyPort, cleanup := makeNotifyPort(nt)
 	defer cleanup()
+	ctx, done := eval.ListenInterrupts()
+	defer done()
+	defer term.SuspendKittyKeyboard()()
 
 	err := ev.Call(f,
 		eval.CallCfg{Args: args, From: "[editor binding]"},
-		eval.EvalCfg{Ports: []*eval.Port{nil, notifyPort, notifyPort}})
-	if err != nil {
+		eval.EvalCfg{Interrupts: ctx, Ports: []*eval.Port{nil, notifyPort, notifyPort}})
+	if err != nil && ctx.Err() == nil {
 		nt.notifyError("binding", err)
 	}
 }

@@ -236,8 +236,9 @@ Modifiers end with either a `-` or `+`, and can be stacked. Examples:
 
 -   `C+A-X`.
 
-**Note:** The `Shift` modifier is only applicable to function keys such as `F1`.
-You cannot write `Shift-m` as a synonym for `M`.
+**Note:** The reader applies `Shift` to text keys when a shifted character is
+known, except for letters combined with `Ctrl` (like `Ctrl-Shift-A`). Otherwise
+the modifier is preserved. You cannot write `Shift-m` as a synonym for `M`.
 
 You may not actually be able to use the full range of possible keys for several
 reasons:
@@ -245,8 +246,30 @@ reasons:
 -   Some `Ctrl-[letter]` keys have special functions, like `Ctrl-C`, `Ctrl-Z`,
     `Ctrl-S` and `Ctrl-Z`.
 
--   Some `Ctrl-[letter]` keys are equivalent to single keypresses, like `Ctrl-J`
-    (equivalent to `Enter`) and `Ctrl-I` (equivalent to `Tab`).
+-   Unless the terminal supports the [kitty keyboard
+    protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/), some
+    `Ctrl-[letter]` keys send the same input as single keypresses, like
+    `Ctrl-I` (read as `Tab`) and `Ctrl-J` and `Ctrl-M` (read as `Enter`). The
+    default bindings bind these keys the same way, so they behave the same
+    either way.
+
+    The editor queries the terminal for support of the protocol when it first
+    starts, and uses it while reading code if the terminal supports it. It is
+    not used in some environments known to have problems with it, like
+    Midnight Commander and Konsole. The protocol makes it possible to bind
+    keys like `Shift-Enter`, `Ctrl-Enter`, `Ctrl-Backspace` and
+    `Ctrl-Shift-A`.
+
+    Bindings for `Ctrl-I` and `Ctrl-J` are now distinct from `Tab` and `Enter`,
+    even when the terminal uses legacy encoding. If your configuration used
+    `Ctrl-I` or `Ctrl-J` to customize Tab or Enter, bind `Tab` or `Enter`
+    explicitly as well. Bind both identities to the same function to keep the
+    behavior consistent across terminals. The same applies to modified forms,
+    such as `Ctrl-Alt-J` and `Alt-Enter`.
+
+    When the terminal reports a base-layout key, bindings for the active
+    keyboard layout are preferred. The base (PC-101 US) layout is used as a
+    fallback for shortcuts, before a default binding.
 
 -   Keys involving multiple modifiers may not be supported by the terminal
     emulator, especially when the base key is a function key.

@@ -59,7 +59,7 @@ func NewEditor(tty cli.TTY, ev *eval.Evaler, st storedefs.Store) *Editor {
 	ed := &Editor{excList: vals.EmptyList}
 	ed.autofix.Store("")
 	nb := eval.BuildNsNamed("edit")
-	appSpec := cli.AppSpec{TTY: tty}
+	appSpec := cli.AppSpec{TTY: tty, Interrupt: eval.Interrupt}
 
 	hs, err := newHistStore(st)
 	if err != nil {

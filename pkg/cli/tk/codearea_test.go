@@ -614,6 +614,17 @@ var codeAreaHandleTests = []handleTest{
 		WantNewState: CodeAreaState{Buffer: CodeBuffer{Content: "b", Dot: 1}},
 	},
 	{
+		Name: "base layout key bindings",
+		Given: NewCodeArea(CodeAreaSpec{Bindings: MapBindings{
+			term.K('Y', ui.Ctrl): func(w Widget) {
+				w.(*codeArea).State.Buffer.InsertAtDot("base")
+			}},
+		}),
+		Events: []term.Event{term.KeyEventWithAlternates{
+			KeyEvent: term.K('Z', ui.Ctrl), Keys: [4]ui.Key{ui.K('Z', ui.Ctrl), {}, ui.K('Y', ui.Ctrl)}}},
+		WantNewState: CodeAreaState{Buffer: CodeBuffer{Content: "base", Dot: 4}},
+	},
+	{
 		// Regression test for #890.
 		Name: "key bindings do not apply when pasting",
 		Given: NewCodeArea(CodeAreaSpec{Bindings: MapBindings{

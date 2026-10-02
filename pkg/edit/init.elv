@@ -34,12 +34,13 @@ set insert:binding = (binding-table [
   &Home= $move-dot-sol~
   &End=  $move-dot-eol~
 
-  &Backspace= $kill-rune-left~
-  &Ctrl-H=    $kill-rune-left~
-  &Delete=    $kill-rune-right~
-  &Ctrl-W=    $kill-word-left~
-  &Ctrl-U=    $kill-line-left~
-  &Ctrl-K=    $kill-line-right~
+  &Backspace=       $kill-rune-left~
+  &Shift-Backspace= $kill-rune-left~
+  &Ctrl-H=          $kill-rune-left~
+  &Delete=          $kill-rune-right~
+  &Ctrl-W=          $kill-word-left~
+  &Ctrl-U=          $kill-line-left~
+  &Ctrl-K=          $kill-line-right~
 
   &Ctrl-V= $insert-raw~
   &Ctrl-Alt-V= $-insert-key-name~
@@ -50,14 +51,20 @@ set insert:binding = (binding-table [
   &Ctrl-L= $location:start~
   &Ctrl-N= $navigation:start~
   &Tab=    $completion:smart-start~
+  &Ctrl-I= $completion:smart-start~
   &Up=     $history:start~
   &Down=   $end-of-history~
 
-  &Alt-Enter={ insert-at-dot "\n" }
+  &Alt-Enter=   { insert-at-dot "\n" }
+  &Ctrl-Alt-J=  { insert-at-dot "\n" }
+  &Ctrl-Alt-M=  { insert-at-dot "\n" }
+  &Shift-Enter= { insert-at-dot "\n" }
 
   &Ctrl-A= $apply-autofix~
 
   &Enter=   $smart-enter~
+  &Ctrl-J=  $smart-enter~
+  &Ctrl-M=  $smart-enter~
   &Ctrl-D=  $return-eof~
 ])
 
@@ -82,6 +89,7 @@ set listing:binding = (binding-table [
   &PageUp=    $listing:page-up~
   &PageDown=  $listing:page-down~
   &Tab=       $listing:down-cycle~
+  &Ctrl-I=    $listing:down-cycle~
   &Shift-Tab= $listing:up-cycle~
 ])
 
@@ -99,7 +107,11 @@ set navigation:binding = (binding-table [
   &Alt-Up=   $navigation:file-preview-up~
   &Alt-Down= $navigation:file-preview-down~
   &Enter=    $navigation:insert-selected-and-quit~
+  &Ctrl-J=   $navigation:insert-selected-and-quit~
+  &Ctrl-M=   $navigation:insert-selected-and-quit~
   &Alt-Enter= $navigation:insert-selected~
+  &Ctrl-Alt-J= $navigation:insert-selected~
+  &Ctrl-Alt-M= $navigation:insert-selected~
   &Ctrl-F=   $navigation:trigger-filter~
   &Ctrl-H=   $navigation:trigger-shown-hidden~
 ])
@@ -108,6 +120,7 @@ set completion:binding = (binding-table [
   &Down=     $completion:down~
   &Up=       $completion:up~
   &Tab=      $completion:down-cycle~
+  &Ctrl-I=   $completion:down-cycle~
   &Shift-Tab=$completion:up-cycle~
   &Left=     $completion:left~
   &Right=    $completion:right~
@@ -144,12 +157,13 @@ set minibuf:binding = (binding-table [
   &Home= $move-dot-sol~
   &End=  $move-dot-eol~
 
-  &Backspace= $kill-rune-left~
-  &Ctrl-H=    $kill-rune-left~
-  &Delete=    $kill-rune-right~
-  &Ctrl-W=    $kill-word-left~
-  &Ctrl-U=    $kill-line-left~
-  &Ctrl-K=    $kill-line-right~
+  &Backspace=       $kill-rune-left~
+  &Shift-Backspace= $kill-rune-left~
+  &Ctrl-H=          $kill-rune-left~
+  &Delete=          $kill-rune-right~
+  &Ctrl-W=          $kill-word-left~
+  &Ctrl-U=          $kill-line-left~
+  &Ctrl-K=          $kill-line-right~
 
   &Ctrl-V= $insert-raw~
 
@@ -159,5 +173,6 @@ set minibuf:binding = (binding-table [
   &Ctrl-L= $location:start~
   &Ctrl-N= $navigation:start~
   &Tab=    $completion:smart-start~
+  &Ctrl-I= $completion:smart-start~
   &Up=     $history:start~
 ])

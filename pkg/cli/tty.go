@@ -78,10 +78,28 @@ func (t *aTTY) ReadEvent() (term.Event, error) {
 	if t.r == nil {
 		t.r = term.NewReader(t.in)
 	}
-	if t.consumeRaw() {
-		return t.r.ReadRawEvent()
+	raw := t.consumeRaw()
+	for {
+		var event term.Event
+		var err error
+		if raw {
+			// Read legacy bytes, as insert-raw expects.
+			resume := term.SuspendKittyKeyboard()
+			event, err = t.r.ReadRawEvent()
+			resume()
+		} else {
+			event, err = t.r.ReadEvent()
+		}
+		if _, ok := event.(term.KittyKeyboardFlags); ok && err == nil {
+			// Handled here rather than relayed, since it's about the
+			// terminal and not something the app needs to know about.
+			if err := term.HandleKittyKeyboardFlags(t.out); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		return event, err
 	}
-	return t.r.ReadEvent()
 }
 
 func (t *aTTY) consumeRaw() bool {

@@ -203,11 +203,15 @@ func (w *codeArea) render(width int) *term.Buffer {
 // Handle handles KeyEvent's of non-function keys, as well as PasteSetting
 // events.
 func (w *codeArea) Handle(event term.Event) bool {
+	if _, ok := event.(term.BindingKeyEvent); ok {
+		return !w.pasting && w.Bindings.Handle(w, event)
+	}
 	switch event := event.(type) {
 	case term.PasteSetting:
 		return w.handlePasteSetting(bool(event))
-	case term.KeyEvent:
-		return w.handleKeyEvent(ui.Key(event))
+	}
+	if key, ok := term.KeyOf(event); ok {
+		return w.handleKeyEvent(key, event)
 	}
 	return false
 }
@@ -406,7 +410,7 @@ func (w *codeArea) expandSmallWordAbbr(trigger rune, categorizer func(rune) int)
 	}
 }
 
-func (w *codeArea) handleKeyEvent(key ui.Key) bool {
+func (w *codeArea) handleKeyEvent(key ui.Key, event term.Event) bool {
 	isFuncKey := key.Mod != 0 || key.Rune < 0
 	if w.pasting {
 		if isFuncKey {
@@ -418,18 +422,18 @@ func (w *codeArea) handleKeyEvent(key ui.Key) bool {
 		return true
 	}
 
-	if w.Bindings.Handle(w, term.KeyEvent(key)) {
+	if w.Bindings.Handle(w, event) {
 		return true
 	}
 
 	// We only implement essential keybindings here. Other keybindings can be
 	// added via handler overlays.
 	switch key {
-	case ui.K('\n'):
+	case ui.K('\n'), ui.K('J', ui.Ctrl), ui.K('M', ui.Ctrl):
 		w.resetInserts()
 		w.Submit()
 		return true
-	case ui.K(ui.Backspace), ui.K('H', ui.Ctrl):
+	case ui.K(ui.Backspace), ui.K(ui.Backspace, ui.Shift), ui.K('H', ui.Ctrl):
 		w.resetInserts()
 		w.MutateState(func(s *CodeAreaState) {
 			c := &s.Buffer

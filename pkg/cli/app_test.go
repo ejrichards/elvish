@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"syscall"
@@ -155,6 +156,47 @@ func TestReadCode_ResetsStateOnSIGINT(t *testing.T) {
 
 	// Verify that the state has now reset.
 	f.TTY.TestBuffer(t, bb().Buffer())
+}
+
+func TestReadCode_ResetsStateOnCtrlC(t *testing.T) {
+	for _, addon := range []bool{false, true} {
+		t.Run(fmt.Sprint(addon), func(t *testing.T) {
+			f := Setup()
+			defer f.Stop()
+			feedInput(f.TTY, "code")
+			f.TTY.TestBuffer(t, bb().Write("code").SetDotHere().Buffer())
+			if addon {
+				f.App.PushAddon(tk.Label{Content: ui.T("mode")})
+			}
+			f.TTY.Inject(term.K('C', ui.Ctrl))
+			f.TTY.TestBuffer(t, bb().Buffer())
+			// Cancellation must also request the next event.
+			f.TTY.Inject(term.K('x'))
+			f.TTY.TestBuffer(t, bb().Write("x").SetDotHere().Buffer())
+		})
+	}
+}
+
+func TestReadCode_InterruptCallback(t *testing.T) {
+	for _, key := range []term.KeyEvent{term.K('C', ui.Ctrl), term.K('\\', ui.Ctrl)} {
+		t.Run(ui.Key(key).String(), func(t *testing.T) {
+			called := make(chan struct{}, 1)
+			f := Setup(WithSpec(func(spec *AppSpec) {
+				spec.Interrupt = func() { called <- struct{}{} }
+			}))
+			defer f.Stop()
+			f.TTY.Inject(key)
+			select {
+			case <-called:
+			case <-time.After(time.Second):
+				t.Fatal("interrupt callback was not called")
+			}
+			f.TTY.Inject(term.K('x'), term.K(ui.Enter))
+			if code, err := f.Wait(); code != "x" || err != nil {
+				t.Errorf("ReadCode = %q, %v; want x, nil", code, err)
+			}
+		})
+	}
 }
 
 func TestReadCode_RedrawsOnSIGWINCH(t *testing.T) {

@@ -73,16 +73,14 @@ func insertKeyName(app cli.App) {
 	}
 	w := modes.NewStub(modes.StubSpec{
 		Bindings: tk.FuncBindings(func(w tk.Widget, event term.Event) bool {
-			switch event := event.(type) {
-			case term.KeyEvent:
+			if key, ok := term.KeyOf(event); ok {
 				codeArea.MutateState(func(s *tk.CodeAreaState) {
-					s.Buffer.InsertAtDot(ui.Key(event).String())
+					s.Buffer.InsertAtDot(key.String())
 				})
 				app.PopAddon()
 				return true
-			default:
-				return false
 			}
+			return false
 		}),
 		Name: " KEY NAME ",
 	})

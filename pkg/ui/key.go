@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"src.elv.sh/pkg/parse"
 	"src.elv.sh/pkg/persistent/hash"
@@ -33,9 +34,8 @@ type Mod byte
 
 // Values for Mod.
 const (
-	// Shift is the shift modifier. It is only applied to special keys (e.g.
-	// Shift-F1). For instance 'A' and '@' which are typically entered with the
-	// shift key pressed, are not considered to be shift-modified.
+	// Shift is the shift modifier. It is consumed when applied to a text key,
+	// except for Ctrl-Shift-letter, which is distinct from Ctrl-letter.
 	Shift Mod = 1 << iota
 	// Alt is the alt modifier, traditionally known as the meta modifier.
 	Alt
@@ -110,6 +110,7 @@ var keyNames = map[rune]string{
 	Tab:                "Tab",
 	Enter:              "Enter",
 	Backspace:          "Backspace",
+	' ':                "Space",
 }
 
 func (k Key) Kind() string {
@@ -173,7 +174,7 @@ func ParseKey(s string) (Key, error) {
 	var k Key
 
 	// Parse modifiers.
-	for {
+	for utf8.RuneCountInString(s) > 1 {
 		i := strings.IndexAny(s, "+-")
 		if i == -1 {
 			break
@@ -187,36 +188,26 @@ func ParseKey(s string) (Key, error) {
 		}
 	}
 
-	if len(s) == 1 {
-		k.Rune = rune(s[0])
-		if k.Rune < 0x20 {
+	if utf8.RuneCountInString(s) == 1 && utf8.ValidString(s) {
+		k.Rune, _ = utf8.DecodeRuneInString(s)
+		// Tab and Enter are their own keys rather than Ctrl-I and Ctrl-J,
+		// which can be distinguished with the kitty keyboard protocol.
+		if k.Rune < 0x20 && k.Rune != Tab && k.Rune != Enter {
 			if k.Mod&Ctrl != 0 {
 				//lint:ignore ST1005 We want this error to begin with "Ctrl" rather than "ctrl"
 				// since the user has to use the capitalized form when creating a key binding.
 				return Key{}, fmt.Errorf("Ctrl modifier with literal control char: %q", k.Rune)
 			}
 			// Convert literal control char to the equivalent canonical form,
-			// e.g. "\e" to Ctrl-'[' and "\t" to Ctrl-I.
+			// e.g. "\e" to Ctrl-'['.
 			k.Mod |= Ctrl
 			k.Rune += 0x40
 		}
-		// TODO(xiaq): The following assumptions about keys with Ctrl are not
-		// checked with all terminals.
-		if k.Mod&Ctrl != 0 {
-			// Keys with Ctrl as one of the modifiers and a single ASCII letter
-			// as the base rune do not distinguish between cases. So we
-			// normalize the base rune to upper case.
-			if 'a' <= k.Rune && k.Rune <= 'z' {
-				k.Rune += 'A' - 'a'
-			}
-			// Normalize Ctrl-I to Tab, Ctrl-J to Enter, and Ctrl-? to Backspace.
-			if k.Rune == 'I' {
-				k.Mod &= ^Ctrl
-				k.Rune = Tab
-			} else if k.Rune == 'J' {
-				k.Mod &= ^Ctrl
-				k.Rune = Enter
-			}
+		// Keys with Ctrl as one of the modifiers and a single ASCII letter as
+		// the base rune do not distinguish between cases. So we normalize the
+		// base rune to upper case.
+		if k.Mod&Ctrl != 0 && 'a' <= k.Rune && k.Rune <= 'z' {
+			k.Rune += 'A' - 'a'
 		}
 		return k, nil
 	}

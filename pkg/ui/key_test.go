@@ -47,6 +47,8 @@ var parseKeyTests = []struct {
 	wantErr string
 }{
 	{s: "x", wantKey: K('x')},
+	{s: "Ctrl-ц", wantKey: K('ц', Ctrl)},
+	{s: "Ctrl-Shift-ä", wantKey: K('ä', Ctrl, Shift)},
 	{s: "Tab", wantKey: K(Tab)},
 	{s: "F1", wantKey: K(F1)},
 
@@ -64,6 +66,9 @@ var parseKeyTests = []struct {
 
 	// + is the same as -.
 	{s: "C+X", wantKey: Key{'X', Ctrl}},
+	{s: "+", wantKey: K('+')},
+	{s: "Ctrl-+", wantKey: K('+', Ctrl)},
+	{s: "Ctrl--", wantKey: K('-', Ctrl)},
 
 	// Full names and alternative names can also be used.
 	{s: "M-x", wantKey: Key{'x', Alt}},
@@ -75,18 +80,23 @@ var parseKeyTests = []struct {
 	{s: "Ctrl+Alt-Delete", wantKey: Key{Delete, Alt | Ctrl}},
 
 	// Confirm alternative symbolic keys are turned into the canonical form.
-	{s: "\t", wantKey: K(Tab)},       // literal tab is normalized to Tab
-	{s: "\n", wantKey: K(Enter)},     // literal newline is normalized to Enter
-	{s: "Ctrl-I", wantKey: K(Tab)},   // Ctrl-I is normalized to Tab
-	{s: "Ctrl-J", wantKey: K(Enter)}, // Ctrl-J is normalized to Enter
+	{s: "\t", wantKey: K(Tab)},   // literal tab is normalized to Tab
+	{s: "\n", wantKey: K(Enter)}, // literal newline is normalized to Enter
 	{s: "Alt-\t", wantKey: Key{Tab, Alt}},
+	{s: "Ctrl-\t", wantKey: Key{Tab, Ctrl}},
 	{s: "\x7F", wantKey: K(Backspace)},
+	{s: "Space", wantKey: K(' ')},
+	{s: "Ctrl-Space", wantKey: Key{' ', Ctrl}},
+
+	// Ctrl-I and Ctrl-J are distinct from Tab and Enter.
+	{s: "Ctrl-I", wantKey: Key{'I', Ctrl}},
+	{s: "Ctrl-J", wantKey: Key{'J', Ctrl}},
 
 	// Errors.
 	{s: "F123", wantErr: "bad key: F123"},
 	{s: "Super-X", wantErr: "bad modifier: Super"},
 	{s: "a-x", wantErr: "bad modifier: a"},
-	{s: "Ctrl-\t", wantErr: `Ctrl modifier with literal control char: '\t'`},
+	{s: "Ctrl-\x01", wantErr: `Ctrl modifier with literal control char: '\x01'`},
 }
 
 func TestParseKey(t *testing.T) {

@@ -36,6 +36,9 @@ const (
 
 // setupVT performs setup for VT-like terminals.
 func setupVT(out *os.File) error {
+	kittyKeyboardMutex.Lock()
+	kittyKeyboard.out = out
+	kittyKeyboardMutex.Unlock()
 	_, width := sys.WinSize(out)
 
 	s := ""
@@ -81,6 +84,9 @@ func setupVT(out *os.File) error {
 	// Enable bracketed paste.
 	s += "\033[?2004h"
 
+	// Enable the kitty keyboard protocol, or query support for it.
+	s += kittyKeyboardSetupSeq()
+
 	_, err := out.WriteString(s)
 	return err
 }
@@ -96,6 +102,8 @@ func restoreVT(out *os.File) error {
 	}
 	// Disable bracketed paste.
 	s += "\033[?2004l"
+	// Disable the kitty keyboard protocol if it was enabled.
+	s += kittyKeyboardRestoreSeq()
 	// Move the cursor to the first row, even if we haven't written anything
 	// visible. This is because the terminal driver might not be smart enough to
 	// recognize some escape sequences as invisible and wrongly assume that we
