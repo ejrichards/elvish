@@ -25,6 +25,14 @@ func putSelfInFg() error {
 	return eunix.Tcsetpgrp(0, syscall.Getpgrp())
 }
 
-func makeSysProcAttr(bg bool) *syscall.SysProcAttr {
+// Returns the attributes to start an external command with. A background
+// command gets its own process group. A command started with noTTY gets its
+// own session, so that it has no controlling terminal: even if it opens
+// /dev/tty, it can't put itself in the foreground process group of the
+// terminal used by Elvish. (A new session implies a new process group.)
+func makeSysProcAttr(bg, noTTY bool) *syscall.SysProcAttr {
+	if noTTY {
+		return &syscall.SysProcAttr{Setsid: true}
+	}
 	return &syscall.SysProcAttr{Setpgid: bg}
 }

@@ -338,9 +338,10 @@ func adaptMatcherMap(nt notifier, ev *eval.Evaler, sink *hintSink, m vals.Map) c
 
 		err = ev.Call(matcher,
 			eval.CallCfg{Args: []any{seed}, From: "[editor matcher]"},
-			eval.EvalCfg{Interrupts: hintSinkContext(ctx, sink), Ports: []*eval.Port{
-				// TODO: Supply the Chan component of port 2.
-				{Chan: input, File: eval.DevNull}, port1, {File: hintSinkStderr(sink)}}})
+			eval.EvalCfg{Interrupts: hintSinkContext(ctx, sink), NoTTY: sink != nil,
+				Ports: []*eval.Port{
+					// TODO: Supply the Chan component of port 2.
+					{Chan: input, File: eval.DevNull}, port1, {File: hintSinkStderr(sink)}}})
 		outputs := collect()
 		if ctx.Err() != nil {
 			return nil
@@ -420,9 +421,10 @@ func adaptArgGeneratorMap(ev *eval.Evaler, sink *hintSink, m vals.Map) complete.
 		}
 		err = ev.Call(gen,
 			eval.CallCfg{Args: argValues, From: "[editor arg generator]"},
-			eval.EvalCfg{Interrupts: hintSinkContext(ctx, sink), Ports: []*eval.Port{
-				// TODO: Supply the Chan component of port 2.
-				nil, port1, {File: hintSinkStderr(sink)}}})
+			eval.EvalCfg{Interrupts: hintSinkContext(ctx, sink), NoTTY: sink != nil,
+				Ports: []*eval.Port{
+					// TODO: Supply the Chan component of port 2.
+					nil, port1, {File: hintSinkStderr(sink)}}})
 		done()
 		if ctx.Err() != nil {
 			return nil, eval.ErrInterrupted

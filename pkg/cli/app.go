@@ -239,6 +239,10 @@ func (a *app) handle(e event) {
 		case sys.SIGWINCH:
 			a.RedrawFull()
 		}
+	case term.FatalErrorEvent:
+		// The reader has stopped for good; return the error instead of waiting
+		// forever for input that will never come.
+		a.loop.Return("", e.Err)
 	case term.Event:
 		// With kitty disambiguation, Ctrl-C and Ctrl-\ are keys instead of
 		// SIGINT and SIGQUIT. A base-layout Ctrl-C counts too, since the

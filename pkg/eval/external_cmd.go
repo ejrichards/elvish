@@ -105,7 +105,7 @@ func (e externalCmd) Call(fm *Frame, argVals []any, opts map[string]any) error {
 
 	args[0] = path
 
-	sys := makeSysProcAttr(fm.background)
+	sys := makeSysProcAttr(fm.background, fm.noTTY)
 	proc, err := os.StartProcess(path, args, &os.ProcAttr{Files: files, Sys: sys})
 	if err != nil {
 		return err

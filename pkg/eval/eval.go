@@ -280,6 +280,10 @@ type EvalCfg struct {
 	// Whether the Eval method should try to put the Elvish in the foreground
 	// after the code is executed.
 	PutInFg bool
+	// Whether external commands must be started without access to the
+	// controlling terminal. Use this for code run in the background while the
+	// terminal is in use by the editor.
+	NoTTY bool
 	// If not nil, used the given global namespace, instead of Evaler's own.
 	Global *Ns
 }
@@ -382,7 +386,7 @@ func (ev *Evaler) prepareFrame(src parse.Source, cfg EvalCfg) (*Frame, func()) {
 
 	ports := fillDefaultDummyPorts(cfg.Ports)
 
-	fm := &Frame{ev, intCtx, ports, nil, false, src, cfg.Global, new(Ns), nil}
+	fm := &Frame{ev, intCtx, ports, nil, false, cfg.NoTTY, src, cfg.Global, new(Ns), nil}
 	return fm, func() {
 		if cfg.PutInFg {
 			err := putSelfInFg()

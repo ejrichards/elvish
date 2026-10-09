@@ -35,6 +35,11 @@ type Frame struct {
 	ports      []*Port
 	traceback  *StackTrace
 	background bool
+	// Whether external commands must be started without access to the
+	// controlling terminal. Set for code run in the background by the editor,
+	// such as completers run for autosuggestions: a child that takes over the
+	// terminal's foreground process group would break the editor's reads.
+	noTTY bool
 
 	// The following fields are only relevant when running Elvish code (as
 	// opposed to a builtin function or external command).
@@ -66,7 +71,8 @@ func (fm *Frame) PrepareEval(src parse.Source, r diag.Ranger, ns *Ns) (*Ns, func
 		traceback = fm.addTraceback(r)
 	}
 	newFm := &Frame{
-		fm.Evaler, fm.ctx, fm.ports, traceback, fm.background, src, local, new(Ns), nil}
+		fm.Evaler, fm.ctx, fm.ports, traceback, fm.background, fm.noTTY,
+		src, local, new(Ns), nil}
 	op, _, err := compile(fm.Evaler.Builtin().static(), local.static(), nil, tree, fm.ErrorFile())
 	if err != nil {
 		return nil, nil, err
