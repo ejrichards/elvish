@@ -8,6 +8,11 @@
 # module can be specified either in the unqualified form (like `put`) or with
 # the explicit `builtin:` namespace (like `builtin:put`).
 #
+# Language reference sections are available as `language:<topic>`, using the
+# same topic names as the anchors on the website (like `language:redirection`
+# or `language:var`). Use `language` to list all topics. A section includes
+# its subsections.
+#
 # The `&width` option specifies the width to wrap the output to. If it is 0 (the
 # default) or negative, `show` queries the terminal width of the standard output
 # and use it as the width, falling back to 80 if the query fails (for example
@@ -28,12 +33,17 @@
 # [ omitted ]
 # ~> doc:show doc:show
 # [ omitted ]
+# ~> doc:show language
+# [ omitted ]
+# ~> doc:show language:var
+# [ omitted ]
 # ```
 #
 # See also [`md:show`]().
 fn show {|symbol &width=0| }
 
-# Finds symbols whose documentation contains all strings in `$queries`.
+# Finds symbols and language reference sections whose documentation contains
+# all strings in `$queries`.
 #
 # The search is done on a version of the documentation with no markup and soft
 # line breaks converted to spaces. For example, if the Markdown source of a
@@ -61,8 +71,9 @@ fn show {|symbol &width=0| }
 # ```
 fn find {|@queries| }
 
-# Outputs the Markdown source of the documentation for `$symbol` as a string
-# value. The `$symbol` arguments follows the same format as
+# Outputs the Markdown source of the documentation for `$symbol` (a symbol or
+# language reference section) as a string value. The `$symbol` argument follows
+# the same format as
 # [`doc:show`]().
 #
 # Examples:

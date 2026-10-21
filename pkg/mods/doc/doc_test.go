@@ -27,7 +27,9 @@ func TestDocExtractionError(t *testing.T) {
 
 func TestTranscripts(t *testing.T) {
 	testutil.Set(t, doc.DocsMapWithError, func() (map[string]elvdoc.Docs, error) {
-		return must.OK1(elvdoc.ExtractAllFromFS(must.OK1(fs.Sub(fakepkg, "fakepkg")))), nil
+		docs := must.OK1(elvdoc.ExtractAllFromFS(must.OK1(fs.Sub(fakepkg, "fakepkg"))))
+		docs["language:"] = doc.ExtractLanguage("# Introduction\n\nA language reference.\n\n# Variables {#var}\n\nDeclares local variables. See [introduction](#introduction).\n")
+		return docs, nil
 	})
 	// The result of reading the FS is cached. As a result, this override can't
 	// be reverted, so we just do it here instead of properly inside a setup

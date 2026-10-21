@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"strings"
@@ -27,8 +28,9 @@ type filterer struct {
 }
 
 var macros = map[string]func(*filterer, string) string{
-	"@module ": (*filterer).expandModule,
-	"@dl ":     (*filterer).expandDl,
+	"@module ":  (*filterer).expandModule,
+	"@dl ":      (*filterer).expandDl,
+	"@include ": (*filterer).expandInclude,
 }
 
 func (f *filterer) filter(in io.Reader, out io.Writer) {
@@ -64,6 +66,14 @@ func (f *filterer) expandModule(rest string) string {
 	// Module doc will be added at end of file
 	return fmt.Sprintf(
 		"<a name='//apple_ref/cpp/Module/%s' class='dashAnchor'></a>", f.module)
+}
+
+func (f *filterer) expandInclude(rest string) string {
+	content, err := fs.ReadFile(pkgFS, rest)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return strings.TrimSuffix(string(content), "\n")
 }
 
 func (f *filterer) expandDl(rest string) string {

@@ -44,6 +44,9 @@ func show(fm *eval.Frame, opts showOptions, fqname string) error {
 		Width:              width,
 		HighlightCodeBlock: elvdoc.HighlightCodeBlock,
 		ConvertRelativeLink: func(dest string) string {
+			if strings.HasPrefix(fqname, "language:") && strings.HasPrefix(dest, "#") {
+				return "https://elv.sh/ref/language.html" + dest
+			}
 			// TTYCodec does not show destinations of relative links by default.
 			// Special-case links to language.html as they are quite common in
 			// elvdocs.
@@ -53,7 +56,7 @@ func show(fm *eval.Frame, opts showOptions, fqname string) error {
 			return ""
 		},
 	}
-	if !strings.HasPrefix(fqname, "$") {
+	if !strings.HasPrefix(fqname, "$") && fqname != "language" && !strings.HasPrefix(fqname, "language:") {
 		// Function docs start with a code block that shows how to use the
 		// function. Since the code block is indented 2 spaces by TTYCodec, it
 		// looks a little bit weird as the first line of the output. Make the
@@ -84,8 +87,13 @@ func find(fm *eval.Frame, qs ...string) {
 	}
 }
 
-// Source returns the doc source for a symbol.
+// Source returns the doc source for a symbol or language reference section.
 func Source(qname string) (string, error) {
+	if qname == "language" {
+		if docs := docsMap()["language:"]; docs.File != nil {
+			return docs.File.Content, nil
+		}
+	}
 	isVar := strings.HasPrefix(qname, "$")
 	var ns string
 	if strings.ContainsRune(qname, ':') {
@@ -129,7 +137,10 @@ func Source(qname string) (string, error) {
 
 func symbols(fm *eval.Frame) error {
 	var names []string
-	for _, docs := range docsMap() {
+	for ns, docs := range docsMap() {
+		if ns == "language:" {
+			names = append(names, "language")
+		}
 		for _, fn := range docs.Fns {
 			names = append(names, fn.Name)
 		}
@@ -149,7 +160,12 @@ func symbols(fm *eval.Frame) error {
 
 // Can be overridden in tests.
 var docsMapWithError = sync.OnceValues(func() (map[string]elvdoc.Docs, error) {
-	return elvdoc.ExtractAllFromFS(pkg.ElvFiles)
+	docs, err := elvdoc.ExtractAllFromFS(pkg.ElvFiles)
+	if err != nil {
+		return nil, err
+	}
+	docs["language:"] = extractLanguage(languageSource)
+	return docs, nil
 })
 
 // Returns a map from namespace prefixes (like "doc:", or "" for the builtin

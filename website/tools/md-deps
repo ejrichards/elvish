@@ -4,6 +4,8 @@
 #
 # Must be run from the website directory.
 
+awk '$1 == "@include" { print "../pkg/" $2 }' ${1%.html}.md
+
 cat ${1%.html}.md |
   awk '$1 == "```ttyshot" { getline; print $1 "-ttyshot.html" }'
 

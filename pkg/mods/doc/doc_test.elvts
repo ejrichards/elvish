@@ -63,6 +63,22 @@ link.
 Exception: no doc for foo:bad
   [tty]:1:1-16: doc:show foo:bad
 
+## language reference ##
+~> doc:show language
+# Language reference
+
+Use doc:show language:<topic> to read a section, or doc:source language:<topic>
+to get its Markdown source.
+
+• language:introduction: Introduction
+
+• language:var: Variables
+~> doc:show language:var
+# Variables
+
+Declares local variables. See introduction
+(https://elv.sh/ref/language.html#introduction).
+
 ## non-existing module ##
 ~> doc:show bad:foo
 Exception: no doc for bad:foo
@@ -77,6 +93,9 @@ foo:function:
   … Lorem ipsum dolor sit amet. …
 $foo:variable:
   … Lorem ipsum.
+~> doc:find 'Declares local'
+language:var:
+  Declares local variables. …
 
 //////////////
 # doc:source #
@@ -86,6 +105,8 @@ $foo:variable:
 // in its tests, so we only test a simple case here.
 ~> doc:source '$foo:variable'
 ▶ "A variable. Lorem ipsum.\n"
+~> doc:source language:var
+▶ "# Variables {#var}\n\nDeclares local variables. See [introduction](#introduction).\n"
 
 ////////////////
 # doc:-symbols #
@@ -96,6 +117,9 @@ $foo:variable:
 ▶ '$foo:variable'
 ▶ break
 ▶ foo:function
+▶ language
+▶ language:introduction
+▶ language:var
 ▶ num
 
 ## output error ##
