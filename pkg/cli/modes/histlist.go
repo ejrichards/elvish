@@ -75,7 +75,8 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 		return nil, fmt.Errorf("db error: %v", err.Error())
 	}
 	items := func(hits []storedefs.CmdHit) histlistItems {
-		return histlistItems{hits, spec.ShowMeta, spec.Now(), spec.HighlightCmd}
+		return histlistItems{hits, spec.ShowMeta, spec.Now(), spec.HighlightCmd,
+			make([]ui.Text, len(hits))}
 	}
 	first := true
 	w := tk.NewComboBox(tk.ComboBoxSpec{
@@ -140,11 +141,29 @@ type histlistItems struct {
 	now time.Time
 	// Highlights the text of an entry.
 	highlight func(code string) ui.Text
+	// Highlighted text of each hit, indexed like hits and filled in as
+	// entries are shown. Highlighting parses the command, and the visible
+	// entries are shown again on every redraw, so it is only done once per
+	// entry. A slice, so that copies of the struct share it.
+	highlighted []ui.Text
 }
 
 func (it histlistItems) hit(i int) storedefs.CmdHit { return it.hits[len(it.hits)-1-i] }
 
 func (it histlistItems) cmd(i int) storedefs.Cmd { return it.hit(i).Cmd }
+
+// Returns the highlighted text of the i-th item, highlighting it on first use.
+func (it histlistItems) text(i int) ui.Text {
+	j := len(it.hits) - 1 - i
+	if it.highlighted[j] == nil {
+		t := it.highlight(it.hits[j].Cmd.Text)
+		if t == nil {
+			t = ui.Text{}
+		}
+		it.highlighted[j] = t
+	}
+	return it.highlighted[j]
+}
 
 // Widths of the duration and "ago" columns. They fit all but the most extreme
 // values ("59m59s" and "364d ago"); longer values push the rest of the line.
@@ -164,7 +183,7 @@ func (it histlistItems) Show(i int) ui.Text {
 		seq = ui.T(fmt.Sprintf("%4d ", entry.Seq), ui.FgBrightBlack)
 	}
 	if !it.showMeta {
-		return ui.Concat(seq, it.highlight(entry.Text))
+		return ui.Concat(seq, it.text(i))
 	}
 	m := hit.Meta
 	var tb ui.TextBuilder
@@ -191,7 +210,7 @@ func (it histlistItems) Show(i int) ui.Text {
 		tb.WriteText(ui.T(ago, ui.FgBlue))
 	}
 	tb.WriteText(ui.T(" "))
-	tb.WriteText(it.highlight(entry.Text))
+	tb.WriteText(it.text(i))
 	return tb.Text()
 }
 
