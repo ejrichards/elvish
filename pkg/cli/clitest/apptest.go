@@ -23,6 +23,7 @@ var Styles = ui.RuneStylesheet{
 	'X': ui.Stylings(ui.Inverse, ui.FgMagenta),
 	'v': ui.FgGreen,
 	'V': ui.Stylings(ui.Underlined, ui.FgGreen),
+	'G': ui.Stylings(ui.Inverse, ui.FgGreen),
 	'$': ui.FgMagenta,
 	'c': ui.FgCyan,        // mnemonic "Comment"
 	'g': ui.FgBrightBlack, // mnemonic "Ghost" (autosuggestion)

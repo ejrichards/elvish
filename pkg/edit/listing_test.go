@@ -2,6 +2,7 @@ package edit
 
 import (
 	"testing"
+	"time"
 
 	"src.elv.sh/pkg/cli/term"
 	"src.elv.sh/pkg/store/storedefs"
@@ -78,6 +79,13 @@ func TestHistlistAddon(t *testing.T) {
 		s.AddCmd("echo")
 		s.AddCmd("ls")
 		s.AddCmd("LS")
+		// Entries 1 and 4 have no metadata, as if recorded by an older
+		// version. The times are far enough in the past that the "ago"
+		// column is stable while the test runs.
+		s.SetCmdMeta(storedefs.CmdMeta{
+			Seq: 2, Time: time.Now().Add(-2 * time.Hour), Duration: 0.022, Exit: 0})
+		s.SetCmdMeta(storedefs.CmdMeta{
+			Seq: 3, Time: time.Now().Add(-3 * 24 * time.Hour), Duration: 1.5, Exit: 2})
 	}))
 
 	f.TTYCtrl.Inject(term.K('R', ui.Ctrl))
@@ -87,10 +95,12 @@ func TestHistlistAddon(t *testing.T) {
 		"******************** ", term.DotHere,
 		"                 Ctrl-D dedup\n", Styles,
 		"                 ++++++      ",
-		"   2 echo\n",
-		"   3 ls\n",
-		"   4 LS                                           ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		"   2   22ms   2h ago echo\n", Styles,
+		"       vvvv   ////// vvvv",
+		"   3   1.5s   3d ago ls\n", Styles,
+		"       !!!!   ////// vv",
+		"   4                 LS                           ", Styles,
+		"+++++++++++++++++++++GG+++++++++++++++++++++++++++",
 	)
 
 	evals(f.Evaler, `edit:histlist:toggle-dedup`)
@@ -100,11 +110,14 @@ func TestHistlistAddon(t *testing.T) {
 		"********* ", term.DotHere,
 		"                            Ctrl-D dedup\n", Styles,
 		"                            ++++++      ",
-		"   1 ls\n",
-		"   2 echo\n",
-		"   3 ls\n",
-		"   4 LS                                           ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		"   1                 ls\n", Styles,
+		"                     vv",
+		"   2   22ms   2h ago echo\n", Styles,
+		"       vvvv   ////// vvvv",
+		"   3   1.5s   3d ago ls\n", Styles,
+		"       !!!!   ////// vv",
+		"   4                 LS                           ", Styles,
+		"+++++++++++++++++++++GG+++++++++++++++++++++++++++",
 	)
 
 	evals(f.Evaler, `edit:histlist:toggle-dedup`)
@@ -117,9 +130,10 @@ func TestHistlistAddon(t *testing.T) {
 		"********************  ", term.DotHere,
 		"                Ctrl-D dedup\n", Styles,
 		"                ++++++      ",
-		"   3 ls\n",
-		"   4 LS                                           ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		"   3   1.5s   3d ago ls\n", Styles,
+		"       !!!!   ////// vv",
+		"   4                 LS                           ", Styles,
+		"+++++++++++++++++++++GG+++++++++++++++++++++++++++",
 	)
 
 	// Filtering is case-sensitive when filter is not all lower case.
@@ -130,8 +144,8 @@ func TestHistlistAddon(t *testing.T) {
 		"********************  ", term.DotHere,
 		"                Ctrl-D dedup\n", Styles,
 		"                ++++++      ",
-		"   4 LS                                           ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		"   4                 LS                           ", Styles,
+		"+++++++++++++++++++++GG+++++++++++++++++++++++++++",
 	)
 }
 

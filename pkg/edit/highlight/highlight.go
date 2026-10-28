@@ -27,6 +27,15 @@ type cmdRegion struct {
 // Maximum wait time to block for late results. Can be changed for test cases.
 var maxBlockForLate = 10 * time.Millisecond
 
+// SyntaxOnly highlights a piece of Elvish code using only its syntax: no
+// static checks are run and all commands are styled as valid. Unlike
+// Highlighter.Get, it is synchronous and cheap, which makes it suitable for
+// highlighting many pieces of code at once, such as the entries of a listing.
+func SyntaxOnly(code string) ui.Text {
+	text, _ := highlight(code, Config{}, nil)
+	return text
+}
+
 // Highlights a piece of Elvish code.
 func highlight(code string, cfg Config, lateCb func(ui.Text)) (ui.Text, []ui.Text) {
 	var tips []ui.Text

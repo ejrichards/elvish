@@ -9,6 +9,12 @@ import (
 
 // A wrapper of histutil.Store that is concurrency-safe and supports an
 // additional FastForward method.
+//
+// The view of the database is frozen when the store is created and on each
+// FastForward: commands added by other sessions since are not seen until the
+// next FastForward, while commands added by this session always are. Queries
+// go to the database, which holds the index, with that view as a bound; only
+// a "no daemon" session searches its own commands in memory.
 type histStore struct {
 	m  sync.Mutex
 	db storedefs.Store
@@ -16,15 +22,20 @@ type histStore struct {
 	// Incremented whenever the content of the store may have changed. Used
 	// for invalidating caches derived from the store.
 	gen uint64
-	// Incremented on each FastForward.
-	ffGen uint64
-	// Commands added since the last FastForward.
-	added []storedefs.Cmd
+	// Sequence number bound of the frozen view: commands with sequence
+	// numbers at or above it are not seen unless added by this session.
+	upto int
+	// Sequence numbers of commands added since the last FastForward.
+	added []int
 }
 
 func newHistStore(db storedefs.Store) (*histStore, error) {
 	hs, err := histutil.NewHybridStore(db)
-	return &histStore{db: db, hs: hs}, err
+	s := &histStore{db: db, hs: hs}
+	if db != nil && err == nil {
+		s.upto, err = db.NextCmdSeq()
+	}
+	return s, err
 }
 
 func (s *histStore) AddCmd(cmd storedefs.Cmd) (int, error) {
@@ -32,7 +43,9 @@ func (s *histStore) AddCmd(cmd storedefs.Cmd) (int, error) {
 	defer s.m.Unlock()
 	s.gen++
 	seq, err := s.hs.AddCmd(cmd)
-	s.added = append(s.added, storedefs.Cmd{Text: cmd.Text, Seq: seq})
+	if err == nil {
+		s.added = append(s.added, seq)
+	}
 	return seq, err
 }
 
@@ -44,35 +57,24 @@ func (s *histStore) Generation() uint64 {
 	return s.gen
 }
 
-// A snapshot of all commands in the store, in oldest to newest order.
-type histSnapshot struct {
-	ffGen  uint64
-	cmds   []storedefs.Cmd
-	nAdded int
-}
-
-// Snapshot returns a snapshot of all commands in the store. If old is a
-// snapshot taken since the last FastForward, it is updated incrementally with
-// the commands added since (which is cheap); otherwise all commands are
-// retrieved from the underlying store.
-func (s *histStore) Snapshot(old *histSnapshot) (*histSnapshot, error) {
+// Search runs a query over the commands in the store's view. The query's
+// Upto and Own fields are set by this method.
+func (s *histStore) Search(q storedefs.CmdQuery) ([]storedefs.CmdHit, error) {
 	s.m.Lock()
-	defer s.m.Unlock()
-	if old != nil && old.ffGen == s.ffGen {
-		if len(s.added) == old.nAdded {
-			return old, nil
-		}
-		// Make a copy to avoid mutating the old snapshot's backing array.
-		cmds := make([]storedefs.Cmd, 0, len(old.cmds)+len(s.added)-old.nAdded)
-		cmds = append(cmds, old.cmds...)
-		cmds = append(cmds, s.added[old.nAdded:]...)
-		return &histSnapshot{s.ffGen, cmds, len(s.added)}, nil
+	db, hs := s.db, s.hs
+	q.Upto = s.upto
+	q.Own = append([]int(nil), s.added...)
+	s.m.Unlock()
+	if db != nil {
+		return db.SearchCmds(q)
 	}
-	cmds, err := s.hs.AllCmds()
+	// Without a database, the store only has this session's commands.
+	cmds, err := hs.AllCmds()
 	if err != nil {
 		return nil, err
 	}
-	return &histSnapshot{s.ffGen, cmds, len(s.added)}, nil
+	q.Upto, q.Own = 0, nil
+	return storedefs.SearchSlice(cmds, nil, q)
 }
 
 // AllCmds returns a slice of all interactive commands in oldest to newest order.
@@ -94,8 +96,10 @@ func (s *histStore) FastForward() error {
 	hs, err := histutil.NewHybridStore(s.db)
 	s.hs = hs
 	s.gen++
-	s.ffGen++
 	s.added = nil
+	if s.db != nil && err == nil {
+		s.upto, err = s.db.NextCmdSeq()
+	}
 	return err
 }
 

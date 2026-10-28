@@ -65,10 +65,12 @@ func NewEditor(tty cli.TTY, ev *eval.Evaler, st storedefs.Store) *Editor {
 	if err != nil {
 		_ = err // TODO(xiaq): Report the error.
 	}
+	cmdMeta := newCmdMetaTracker(st)
+	ed.AfterCommand = append(ed.AfterCommand, cmdMeta.cmdFinished)
 
 	initMaxHeight(&appSpec, nb)
 	initReadlineHooks(&appSpec, ev, nb)
-	initAddCmdFilters(&appSpec, ev, nb, hs)
+	initAddCmdFilters(&appSpec, ev, nb, hs, cmdMeta)
 	initGlobalBindings(&appSpec, ed, ev, nb)
 	initInsertAPI(&appSpec, ed, ev, nb)
 	initHighlighter(&appSpec, ed, ev, nb)

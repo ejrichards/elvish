@@ -148,6 +148,74 @@ func (c *client) PrevCmd(upto int, prefix string) (storedefs.Cmd, error) {
 	return storedefs.Cmd{Text: res.Text, Seq: res.Seq}, err
 }
 
+func (c *client) HostID() (string, error) {
+	req := &api.HostIDRequest{}
+	res := &api.HostIDResponse{}
+	err := c.call("HostID", req, res)
+	return res.ID, err
+}
+
+func (c *client) SetCmdMeta(meta storedefs.CmdMeta) error {
+	req := &api.SetCmdMetaRequest{Meta: meta}
+	res := &api.SetCmdMetaResponse{}
+	return c.call("SetCmdMeta", req, res)
+}
+
+func (c *client) CmdMeta(seq int) (storedefs.CmdMeta, error) {
+	req := &api.CmdMetaRequest{Seq: seq}
+	res := &api.CmdMetaResponse{}
+	err := c.call("CmdMeta", req, res)
+	return res.Meta, err
+}
+
+func (c *client) CmdsMeta(from, upto int) ([]storedefs.CmdMeta, error) {
+	req := &api.CmdsMetaRequest{From: from, Upto: upto}
+	res := &api.CmdsMetaResponse{}
+	err := c.call("CmdsMeta", req, res)
+	return res.Metas, err
+}
+
+func (c *client) DeletedCmds(from, upto int) ([]storedefs.CmdMeta, error) {
+	req := &api.DeletedCmdsRequest{From: from, Upto: upto}
+	res := &api.DeletedCmdsResponse{}
+	err := c.call("DeletedCmds", req, res)
+	return res.Metas, err
+}
+
+func (c *client) CommitCmdMeta(meta storedefs.CmdMeta) (storedefs.CmdMeta, error) {
+	req := &api.CommitCmdMetaRequest{Meta: meta}
+	res := &api.CommitCmdMetaResponse{}
+	err := c.call("CommitCmdMeta", req, res)
+	return res.Meta, err
+}
+
+func (c *client) Status() (storedefs.Status, error) {
+	req := &api.StatusRequest{}
+	res := &api.StatusResponse{}
+	err := c.call("Status", req, res)
+	return res.Status, err
+}
+
+func (c *client) Records(host, kind string, from uint64, limit int) ([]storedefs.Record, error) {
+	req := &api.RecordsRequest{Host: host, Kind: kind, From: from, Limit: limit}
+	res := &api.RecordsResponse{}
+	err := c.call("Records", req, res)
+	return res.Records, err
+}
+
+func (c *client) Ingest(records []storedefs.Record) error {
+	req := &api.IngestRequest{Records: records}
+	res := &api.IngestResponse{}
+	return c.call("Ingest", req, res)
+}
+
+func (c *client) SearchCmds(q storedefs.CmdQuery) ([]storedefs.CmdHit, error) {
+	req := &api.SearchCmdsRequest{Query: q}
+	res := &api.SearchCmdsResponse{}
+	err := c.call("SearchCmds", req, res)
+	return res.Hits, err
+}
+
 func (c *client) AddDir(dir string, incFactor float64) error {
 	req := &api.AddDirRequest{Dir: dir, IncFactor: incFactor}
 	res := &api.AddDirResponse{}

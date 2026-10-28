@@ -572,8 +572,8 @@ func TestAutosuggestion_HiddenInListingMode(t *testing.T) {
 		"******************** ", term.DotHere,
 		"                 Ctrl-D dedup\n", Styles,
 		"                 ++++++      ",
-		"   1 echo a                                       ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		"   1                 echo a                       ", Styles,
+		"+++++++++++++++++++++GGGG+++++++++++++++++++++++++",
 	)
 }
 

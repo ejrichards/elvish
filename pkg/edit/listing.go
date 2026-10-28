@@ -8,6 +8,7 @@ import (
 	"src.elv.sh/pkg/cli/modes"
 	"src.elv.sh/pkg/cli/tk"
 	"src.elv.sh/pkg/edit/filter"
+	"src.elv.sh/pkg/edit/highlight"
 	"src.elv.sh/pkg/eval"
 	"src.elv.sh/pkg/eval/vals"
 	"src.elv.sh/pkg/eval/vars"
@@ -15,7 +16,7 @@ import (
 	"src.elv.sh/pkg/ui"
 )
 
-func initListings(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore histutil.Store, nb eval.NsBuilder) {
+func initListings(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore *histStore, nb eval.NsBuilder) {
 	bindingVar := newBindingVar(emptyBindingsMap)
 	app := ed.app
 	nb.AddNs("listing",
@@ -34,7 +35,7 @@ func initListings(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore his
 				},
 			}))
 
-	initHistlist(ed, ev, histStore, bindingVar, nb)
+	initHistlist(ed, ev, st, histStore, bindingVar, nb)
 	initLastcmd(ed, ev, histStore, bindingVar, nb)
 	initLocation(ed, ev, st, bindingVar, nb)
 }
@@ -50,21 +51,44 @@ var filterSpec = modes.FilterSpec{
 	Highlighter: filter.Highlight,
 }
 
-func initHistlist(ed *Editor, ev *eval.Evaler, histStore histutil.Store, commonBindingVar vars.PtrVar, nb eval.NsBuilder) {
+// How many entries the histlist shows at most. The newest matches are
+// shown; the filter narrows them down. Keeping this bounded is what keeps the
+// mode fast however large the history is: the search runs in the daemon and
+// only this many entries ever reach the editor.
+const histlistLimit = 1000
+
+func initHistlist(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore *histStore, commonBindingVar vars.PtrVar, nb eval.NsBuilder) {
 	bindingVar := newBindingVar(emptyBindingsMap)
 	bindings := newMapBindings(ed, ev, bindingVar, commonBindingVar)
 	dedup := newBoolVar(true)
+	search := func(f string, dedup bool) ([]storedefs.CmdHit, error) {
+		// A filter that doesn't compile (for example while a subfilter is
+		// being typed) matches everything, like in the other listing modes.
+		text, err := filter.CompileQuery(f)
+		if err != nil {
+			text = storedefs.TextQuery{}
+		}
+		return histStore.Search(storedefs.CmdQuery{Text: text, Dedup: dedup, Limit: histlistLimit})
+	}
 	ns := eval.BuildNsNamed("edit:histlist").
 		AddVar("binding", bindingVar).
 		AddGoFns(map[string]any{
 			"start": func() {
 				w, err := modes.NewHistlist(ed.app, modes.HistlistSpec{
 					Bindings: bindings,
-					AllCmds:  histStore.AllCmds,
+					Search:   search,
+					// Metadata is only kept in the database, so there is
+					// none to show in a "no daemon" session.
+					ShowMeta: st != nil,
+					// The editor's own highlighter checks whether commands
+					// exist, asynchronously and with a single-entry cache;
+					// that's too expensive for a listing, so only syntax is
+					// highlighted here.
+					HighlightCmd: highlight.SyntaxOnly,
 					Dedup: func() bool {
 						return dedup.Get().(bool)
 					},
-					Filter: filterSpec,
+					FilterHighlighter: filter.Highlight,
 					CodeAreaRPrompt: func() ui.Text {
 						return bindingTips(ed.ns, "histlist:binding",
 							bindingTip("dedup", "histlist:toggle-dedup"))

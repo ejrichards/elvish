@@ -41,7 +41,7 @@ func initAfterReadline(appSpec *cli.AppSpec, ev *eval.Evaler, nb eval.NsBuilder)
 	})
 }
 
-func initAddCmdFilters(appSpec *cli.AppSpec, ev *eval.Evaler, nb eval.NsBuilder, s histutil.Store) {
+func initAddCmdFilters(appSpec *cli.AppSpec, ev *eval.Evaler, nb eval.NsBuilder, s histutil.Store, meta *cmdMetaTracker) {
 	ignoreLeadingSpace := eval.NewGoFn("<ignore-cmd-with-leading-space>",
 		func(s string) bool { return !strings.HasPrefix(s, " ") })
 	filters := newListVar(vals.MakeList(ignoreLeadingSpace))
@@ -51,7 +51,10 @@ func initAddCmdFilters(appSpec *cli.AppSpec, ev *eval.Evaler, nb eval.NsBuilder,
 		if code != "" &&
 			callFilters(ev, "$<edit>:add-cmd-filters",
 				filters.Get().(vals.List), code) {
-			s.AddCmd(storedefs.Cmd{Text: code, Seq: -1})
+			seq, err := s.AddCmd(storedefs.Cmd{Text: code, Seq: -1})
+			if err == nil {
+				meta.cmdAdded(code, seq)
+			}
 		}
 		// TODO(xiaq): Handle the error.
 	})

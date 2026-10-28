@@ -3,21 +3,22 @@ package store
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
 	"src.elv.sh/pkg/testutil"
 )
 
-// MustTempStore returns a Store backed by a temporary file for testing. The
-// Store and its underlying file will be cleaned up properly after the test is
-// finished.
+// MustTempStore returns a Store backed by a file in a temporary directory for
+// testing. The Store and the directory will be cleaned up properly after the
+// test is finished.
 func MustTempStore(c testutil.Cleanuper) DBStore {
-	f, err := os.CreateTemp("", "elvish.test")
+	dir, err := os.MkdirTemp("", "elvish.test")
 	if err != nil {
-		panic(fmt.Sprintf("open temp file: %v", err))
+		panic(fmt.Sprintf("create temp dir: %v", err))
 	}
-	db, err := bolt.Open(f.Name(), 0644, &bolt.Options{
+	db, err := bolt.Open(filepath.Join(dir, "db.bolt"), 0644, &bolt.Options{
 		Timeout: time.Second, NoSync: true, NoFreelistSync: true})
 	if err != nil {
 		panic(fmt.Sprintf("open boltdb: %v", err))
@@ -29,10 +30,9 @@ func MustTempStore(c testutil.Cleanuper) DBStore {
 	}
 	c.Cleanup(func() {
 		st.Close()
-		f.Close()
-		err = os.Remove(f.Name())
+		err = os.RemoveAll(dir)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "failed to remove temp file:", err)
+			fmt.Fprintln(os.Stderr, "failed to remove temp dir:", err)
 		}
 	})
 	return st

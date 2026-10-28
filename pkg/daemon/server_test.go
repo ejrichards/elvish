@@ -33,7 +33,16 @@ func TestProgram_ServesClientRequests(t *testing.T) {
 
 	// Test store requests.
 	storetest.TestCmd(t, client)
+	storetest.TestCmdMeta(t, client)
+	storetest.TestRecords(t, client)
 	storetest.TestDir(t, client)
+}
+
+func TestProgram_ServesSearchRequests(t *testing.T) {
+	setup(t)
+	startServer(t, cli("sock", "db"))
+	client := startClient(t, "sock")
+	storetest.TestSearch(t, client)
 }
 
 func TestProgram_StillServesIfCannotOpenDB(t *testing.T) {

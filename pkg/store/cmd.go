@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 
 	bolt "go.etcd.io/bbolt"
 	. "src.elv.sh/pkg/store/storedefs"
@@ -40,15 +41,40 @@ func (s *dbStore) AddCmd(cmd string) (int, error) {
 		}
 		return b.Put(marshalSeq(seq), []byte(cmd))
 	})
+	if err == nil {
+		s.idx.update(func() { s.idx.appendCmd(seq, cmd) })
+	}
 	return int(seq), err
 }
 
-// DelCmd deletes a command history item with the given sequence number.
+// DelCmd deletes a command history item with the given sequence number. If
+// the item has metadata, the deletion is recorded in this host's series.
 func (s *dbStore) DelCmd(seq int) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	host, err := s.HostID()
+	if err != nil {
+		return err
+	}
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		key := marshalSeq(uint64(seq))
+		if v := tx.Bucket([]byte(bucketCmdMeta)).Get(key); v != nil {
+			var meta CmdMeta
+			if err := json.Unmarshal(v, &meta); err != nil {
+				return err
+			}
+			if err := recordDeletion(tx, host, meta); err != nil {
+				return err
+			}
+		}
+		if err := tombstoneCmdMeta(tx, key); err != nil {
+			return err
+		}
 		b := tx.Bucket([]byte(bucketCmd))
-		return b.Delete(marshalSeq(uint64(seq)))
+		return b.Delete(key)
 	})
+	if err == nil {
+		s.idx.update(func() { s.idx.delCmd(uint64(seq)) })
+	}
+	return err
 }
 
 // Cmd queries the command history item with the specified sequence number.

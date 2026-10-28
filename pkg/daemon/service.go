@@ -90,6 +90,92 @@ func (s *service) PrevCmd(req *api.PrevCmdRequest, res *api.PrevCmdResponse) err
 	return err
 }
 
+func (s *service) HostID(req *api.HostIDRequest, res *api.HostIDResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	id, err := s.store.HostID()
+	res.ID = id
+	return err
+}
+
+func (s *service) SetCmdMeta(req *api.SetCmdMetaRequest, res *api.SetCmdMetaResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	return s.store.SetCmdMeta(req.Meta)
+}
+
+func (s *service) CmdMeta(req *api.CmdMetaRequest, res *api.CmdMetaResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	meta, err := s.store.CmdMeta(req.Seq)
+	res.Meta = meta
+	return err
+}
+
+func (s *service) CmdsMeta(req *api.CmdsMetaRequest, res *api.CmdsMetaResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	metas, err := s.store.CmdsMeta(req.From, req.Upto)
+	res.Metas = metas
+	return err
+}
+
+func (s *service) DeletedCmds(req *api.DeletedCmdsRequest, res *api.DeletedCmdsResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	metas, err := s.store.DeletedCmds(req.From, req.Upto)
+	res.Metas = metas
+	return err
+}
+
+func (s *service) CommitCmdMeta(req *api.CommitCmdMetaRequest, res *api.CommitCmdMetaResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	meta, err := s.store.CommitCmdMeta(req.Meta)
+	res.Meta = meta
+	return err
+}
+
+func (s *service) Status(req *api.StatusRequest, res *api.StatusResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	status, err := s.store.Status()
+	res.Status = status
+	return err
+}
+
+func (s *service) Records(req *api.RecordsRequest, res *api.RecordsResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	records, err := s.store.Records(req.Host, req.Kind, req.From, req.Limit)
+	res.Records = records
+	return err
+}
+
+func (s *service) Ingest(req *api.IngestRequest, res *api.IngestResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	return s.store.Ingest(req.Records)
+}
+
+func (s *service) SearchCmds(req *api.SearchCmdsRequest, res *api.SearchCmdsResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	hits, err := s.store.SearchCmds(req.Query)
+	res.Hits = hits
+	return err
+}
+
 func (s *service) AddDir(req *api.AddDirRequest, res *api.AddDirResponse) error {
 	if s.err != nil {
 		return s.err

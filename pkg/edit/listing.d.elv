@@ -25,6 +25,12 @@ fn listing:page-up { }
 fn listing:page-down { }
 
 # Starts the history listing mode.
+#
+# Each entry shows its sequence number, how long the command ran (green if it
+# succeeded, red if it failed), how long ago it was run, and the command
+# itself with syntax highlighting. The duration is blank for commands that
+# haven't finished, and both columns are blank for entries recorded without
+# metadata.
 fn histlist:start { }
 
 # Toggles deduplication in history listing mode.

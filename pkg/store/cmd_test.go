@@ -10,3 +10,7 @@ import (
 func TestCmd(t *testing.T) {
 	storetest.TestCmd(t, store.MustTempStore(t))
 }
+
+func TestCmdMeta(t *testing.T) {
+	storetest.TestCmdMeta(t, store.MustTempStore(t))
+}

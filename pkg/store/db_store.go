@@ -27,6 +27,13 @@ type DBStore interface {
 type dbStore struct {
 	db *bolt.DB
 	wg sync.WaitGroup // used for registering outstanding operations on the store
+
+	hostIDMutex sync.Mutex
+	hostID      string // cached result of HostID; empty until first read
+
+	// In-memory index of the command history, for queries. Built in the
+	// background from the time the store is opened.
+	idx *cmdIndex
 }
 
 func dbWithDefaultOptions(dbname string) (*bolt.DB, error) {
@@ -51,8 +58,9 @@ func NewStoreFromDB(db *bolt.DB) (DBStore, error) {
 	logger.Println("initializing store")
 	defer logger.Println("initialized store")
 	st := &dbStore{
-		db: db,
-		wg: sync.WaitGroup{},
+		db:  db,
+		wg:  sync.WaitGroup{},
+		idx: newCmdIndex(),
 	}
 
 	err := db.Update(func(tx *bolt.Tx) error {
@@ -64,7 +72,19 @@ func NewStoreFromDB(db *bolt.DB) (DBStore, error) {
 		}
 		return nil
 	})
-	return st, err
+	if err != nil {
+		return st, err
+	}
+	// Build the index now rather than on the first query, so that the first
+	// query doesn't pay for it. Close waits for the build to finish.
+	st.wg.Add(1)
+	go func() {
+		defer st.wg.Done()
+		if err := st.idx.build(db); err != nil {
+			logger.Printf("failed to build command index: %v", err)
+		}
+	}()
+	return st, nil
 }
 
 // Close waits for all outstanding operations to finish, and closes the

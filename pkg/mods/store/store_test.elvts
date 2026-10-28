@@ -31,6 +31,128 @@
 ▶ [&seq=(num 1) &text=foo]
 ▶ [&seq=(num 3) &text=baz]
 
+# command metadata #
+~> eq (store:host-id) (store:host-id)
+▶ $true
+~> store:add-cmd foo
+▶ (num 1)
+~> store:cmd-meta 1
+Exception: no metadata for command line
+  [tty]:1:1-16: store:cmd-meta 1
+~> store:set-cmd-meta [&seq=(num 1) &id=x &time=2026-10-27T01:02:03.000004Z &duration=(num 1.5) &exit=(num 2) &host=h &dir=/d &session=s]
+~> store:cmd-meta 1
+▶ [&dir=/d &duration=(num 1.5) &exit=(num 2) &host=h &id=x &idx=(num 0) &seq=(num 1) &session=s &time=2026-10-27T01:02:03.000004Z]
+// omitted keys are zero
+~> store:set-cmd-meta [&seq=(num 1) &id=y]
+~> store:cmd-meta 1
+▶ [&dir='' &duration=(num 0.0) &exit=(num 0) &host='' &id=y &idx=(num 0) &seq=(num 1) &session='' &time=0001-01-01T00:00:00Z]
+~> store:set-cmd-meta [&seq=(num 2) &id=z]
+Exception: no matching command line
+  [tty]:1:1-39: store:set-cmd-meta [&seq=(num 2) &id=z]
+~> store:set-cmd-meta [&seq=(num 1) &bad=z]
+Exception: unknown key bad
+  [tty]:1:1-40: store:set-cmd-meta [&seq=(num 1) &bad=z]
+~> store:cmds-meta 0 -1
+▶ [&dir='' &duration=(num 0.0) &exit=(num 0) &host='' &id=y &idx=(num 0) &seq=(num 1) &session='' &time=0001-01-01T00:00:00Z]
+// deleting an entry with metadata records a tombstone
+~> store:del-cmd 1
+~> store:cmds-meta 0 -1
+~> store:deleted-cmds 0 -1
+▶ [&dir='' &duration=(num 0.0) &exit=(num 0) &host='' &id=y &idx=(num 0) &seq=(num 1) &session='' &time=0001-01-01T00:00:00Z]
+
+# series #
+~> store:status
+▶ [&]
+~> store:add-cmd foo
+▶ (num 1)
+~> store:set-cmd-meta [&seq=(num 1) &id=x &host=(store:host-id)]
+~> put (store:cmd-meta 1)[idx]
+▶ (num 0)
+// committing appends a record to the host's series and assigns an index
+~> put (store:commit-cmd-meta [&seq=(num 1) &id=x &host=(store:host-id) &duration=(num 1.5)])[idx]
+▶ (num 1)
+~> put (store:status)[(store:host-id)]
+▶ [&cmd=(num 1)]
+~> put (store:records (store:host-id) cmd 1 0)[op idx text duration]
+▶ add
+▶ (num 1)
+▶ foo
+▶ (num 1.5)
+// committing again only updates the metadata
+~> put (store:commit-cmd-meta [&seq=(num 1) &id=x &host=(store:host-id) &duration=(num 2)])[idx]
+▶ (num 1)
+~> put (store:cmd-meta 1)[duration idx]
+▶ (num 2.0)
+▶ (num 1)
+~> put (store:status)[(store:host-id)]
+▶ [&cmd=(num 1)]
+// metadata set without an index keeps the existing one
+~> store:set-cmd-meta [&seq=(num 1) &id=x]
+~> put (store:cmd-meta 1)[idx]
+▶ (num 1)
+// ingesting records from another host
+~> store:ingest [[&v=(num 2) &kind=cmd &host=01234567-89ab-7def-8123-456789abcdef &idx=(num 1) &op=add &id=y &time=2026-10-27T01:02:03Z &text=bar &exit=(num 2) &dir=/d]]
+~> store:cmds 1 -1
+▶ [&seq=(num 1) &text=foo]
+▶ [&seq=(num 2) &text=bar]
+~> store:cmd-meta 2
+▶ [&dir=/d &duration=(num 0.0) &exit=(num 2) &host=01234567-89ab-7def-8123-456789abcdef &id=y &idx=(num 1) &seq=(num 2) &session='' &time=2026-10-27T01:02:03Z]
+~> put (store:status)[01234567-89ab-7def-8123-456789abcdef]
+▶ [&cmd=(num 1)]
+// records must extend their series contiguously
+~> store:ingest [[&v=(num 2) &kind=cmd &host=01234567-89ab-7def-8123-456789abcdef &idx=(num 3) &op=add &id=z]]
+Exception: record z: index 3 does not follow series tail 1
+  [tty]:1:1-107: store:ingest [[&v=(num 2) &kind=cmd &host=01234567-89ab-7def-8123-456789abcdef &idx=(num 3) &op=add &id=z]]
+// a deletion from another host removes the entry
+~> store:ingest [[&v=(num 2) &kind=cmd &host=01234567-89ab-7def-8123-456789abcdef &idx=(num 2) &op=del &id=d &target=x]]
+~> store:cmds 1 -1
+▶ [&seq=(num 2) &text=bar]
+~> put (store:deleted-cmds 1 2)[id]
+▶ x
+// an entry that arrives after its deletion is not added again
+~> store:ingest [[&v=(num 2) &kind=cmd &host=01234567-89ab-7def-8123-456789abcdef &idx=(num 3) &op=add &id=x &text=foo]]
+~> store:cmds 1 -1
+▶ [&seq=(num 2) &text=bar]
+~> put (store:status)[01234567-89ab-7def-8123-456789abcdef]
+▶ [&cmd=(num 3)]
+// deleting locally records it in this host's series
+~> store:del-cmd 2
+~> put (store:records (store:host-id) cmd 2 0)[op target]
+▶ del
+▶ y
+// from and limit
+~> store:records 01234567-89ab-7def-8123-456789abcdef cmd 2 1 | each {|r| put $r[idx] }
+▶ (num 2)
+
+# searching #
+~> store:add-cmd 'echo hi'
+▶ (num 1)
+~> store:add-cmd 'git status'
+▶ (num 2)
+~> store:add-cmd 'echo hi'
+▶ (num 3)
+~> store:set-cmd-meta [&seq=(num 2) &id=x &time=2026-10-27T01:02:03Z &dir=/d &exit=(num 1)]
+~> store:search-cmds [&] | each {|h| put $h[seq] }
+▶ (num 3)
+▶ (num 2)
+▶ (num 1)
+~> store:search-cmds [&dedup=$true] | each {|h| put $h[seq] }
+▶ (num 3)
+▶ (num 2)
+~> store:search-cmds [&substring=GIT &fold=$true]
+▶ [&dir=/d &duration=(num 0.0) &exit=(num 1) &host='' &seq=(num 2) &session='' &text='git status' &time=2026-10-27T01:02:03Z]
+~> store:search-cmds [&prefix=echo &limit=(num 1) &before=(num 3)]
+▶ [&dir='' &duration=(num 0.0) &exit=(num 0) &host='' &seq=(num 1) &session='' &text='echo hi' &time=0001-01-01T00:00:00Z]
+~> store:search-cmds [&exit=fail] | each {|h| put $h[seq] }
+▶ (num 2)
+~> store:search-cmds [&dir=/nope]
+~> store:search-cmds [&regexp='(']
+Exception: error parsing regexp: missing closing ): `(`
+  [tty]:1:1-31: store:search-cmds [&regexp='(']
+~> store:search-cmds [&exit=maybe]
+Exception: bad value for exit: must be ok or fail
+  [tty]:1:1-31: store:search-cmds [&exit=maybe]
+
 # directory store #
 // add
 ~> store:add-dir /foo

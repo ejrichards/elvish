@@ -6,8 +6,9 @@ import (
 	"src.elv.sh/pkg/store/storedefs"
 )
 
-// Version is the API version. It should be bumped any time the API changes.
-const Version = -93
+// Version is the API version. It should be bumped (increased) any time the API
+// changes: a client treats a daemon reporting a smaller version as outdated.
+const Version = -92
 
 // ServiceName is the name of the RPC service exposed by the daemon.
 const ServiceName = "Daemon"
@@ -93,6 +94,87 @@ type PrevCmdRequest struct {
 type PrevCmdResponse struct {
 	Seq  int
 	Text string
+}
+
+// Cmd metadata requests.
+
+type HostIDRequest struct{}
+
+type HostIDResponse struct {
+	ID string
+}
+
+type SetCmdMetaRequest struct {
+	Meta storedefs.CmdMeta
+}
+
+type SetCmdMetaResponse struct{}
+
+type CmdMetaRequest struct {
+	Seq int
+}
+
+type CmdMetaResponse struct {
+	Meta storedefs.CmdMeta
+}
+
+type CmdsMetaRequest struct {
+	From int
+	Upto int
+}
+
+type CmdsMetaResponse struct {
+	Metas []storedefs.CmdMeta
+}
+
+type DeletedCmdsRequest struct {
+	From int
+	Upto int
+}
+
+type DeletedCmdsResponse struct {
+	Metas []storedefs.CmdMeta
+}
+
+type CommitCmdMetaRequest struct {
+	Meta storedefs.CmdMeta
+}
+
+type CommitCmdMetaResponse struct {
+	Meta storedefs.CmdMeta
+}
+
+// Series requests.
+
+type StatusRequest struct{}
+
+type StatusResponse struct {
+	Status storedefs.Status
+}
+
+type RecordsRequest struct {
+	Host  string
+	Kind  string
+	From  uint64
+	Limit int
+}
+
+type RecordsResponse struct {
+	Records []storedefs.Record
+}
+
+type IngestRequest struct {
+	Records []storedefs.Record
+}
+
+type IngestResponse struct{}
+
+type SearchCmdsRequest struct {
+	Query storedefs.CmdQuery
+}
+
+type SearchCmdsResponse struct {
+	Hits []storedefs.CmdHit
 }
 
 // Dir requests.

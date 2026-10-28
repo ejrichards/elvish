@@ -127,8 +127,6 @@ type suggester struct {
 	// restored when the user deletes back to the code it was for.
 	savedCode, savedFull string
 	savedExact           bool
-	// The snapshot of the history store used by the last lookup.
-	snapshot *histSnapshot
 	// The notes from the completers run by the last finished lookup, and the
 	// code that lookup was for. The hint is kept while the user keeps typing
 	// after hintCode, until the next lookup finishes; this avoids flickering.
@@ -279,29 +277,16 @@ func (s *suggester) lookup(code string, gen uint64, skipHistory bool) {
 // code, preferring exact matches to case-insensitive ones. Returns the
 // suggested full code and whether it is an exact match, or "" if there is
 // none.
+//
+// The history is queried in pages of the newest matches, so that the cost
+// doesn't depend on the size of the history. Only the runnable check, which
+// looks at the filesystem, happens in the editor.
 func (s *suggester) fromHistory(code string, gen uint64) (string, bool) {
-	cmds := s.getSnapshot()
-
 	// Pass 1: whole-buffer prefix.
-	reserve := ""
-	for i := len(cmds) - 1; i >= 0; i-- {
-		text := cmds[i].Text
-		if len(text) <= len(code) {
-			continue
-		}
-		if strings.HasPrefix(text, code) {
-			if s.runnable(text) {
-				return text, true
-			}
-		} else if reserve == "" && foldHasPrefix(text, code) {
-			if s.runnable(text) {
-				reserve = text
-			}
-		}
-		if i%256 == 0 && s.stale(code, gen) {
-			return "", false
-		}
+	if full := s.findRunnable(code, gen, storedefs.QPrefix, code, false); full != "" {
+		return full, true
 	}
+	reserve := s.findRunnable(code, gen, storedefs.QPrefix, code, true)
 
 	// Pass 2: last-line prefix, for multi-line code whose last line starts a
 	// new command. The suggestion is only that line.
@@ -310,24 +295,12 @@ func (s *suggester) fromHistory(code string, gen uint64) (string, bool) {
 		lineTrim := strings.TrimLeft(line, " \t")
 		if lineTrim != "" {
 			prefix := code[:len(code)-len(lineTrim)]
-			for i := len(cmds) - 1; i >= 0; i-- {
-				for _, l := range strings.Split(cmds[i].Text, "\n") {
-					l = strings.TrimLeft(l, " \t")
-					if len(l) <= len(lineTrim) {
-						continue
-					}
-					if strings.HasPrefix(l, lineTrim) {
-						if s.runnable(l) {
-							return prefix + l, true
-						}
-					} else if reserve == "" && foldHasPrefix(l, lineTrim) {
-						if s.runnable(l) {
-							reserve = prefix + l
-						}
-					}
-				}
-				if i%256 == 0 && s.stale(code, gen) {
-					return "", false
+			if l := s.findRunnable(code, gen, storedefs.QLinePrefix, lineTrim, false); l != "" {
+				return prefix + l, true
+			}
+			if reserve == "" {
+				if l := s.findRunnable(code, gen, storedefs.QLinePrefix, lineTrim, true); l != "" {
+					reserve = prefix + l
 				}
 			}
 		}
@@ -336,21 +309,40 @@ func (s *suggester) fromHistory(code string, gen uint64) (string, bool) {
 	return reserve, false
 }
 
-func (s *suggester) getSnapshot() []storedefs.Cmd {
-	s.mu.Lock()
-	old := s.snapshot
-	s.mu.Unlock()
+// How many history entries to retrieve per query when looking for a runnable
+// suggestion. Most lookups find one in the first page.
+const suggestionPage = 32
 
-	snapshot, err := s.hs.Snapshot(old)
-	if err != nil || snapshot == nil {
-		return nil
+// Finds the newest history entry matching the given text query that is
+// runnable and longer than the query argument. For QLinePrefix, the matching
+// line (without leading whitespace) is returned rather than the whole entry.
+// Returns "" if there is none, or if the lookup went stale.
+func (s *suggester) findRunnable(code string, gen uint64, op, arg string, fold bool) string {
+	q := storedefs.CmdQuery{
+		Text:  storedefs.TextQuery{Op: op, Arg: arg, Fold: fold},
+		Dedup: true, Limit: suggestionPage,
 	}
-	if snapshot != old {
-		s.mu.Lock()
-		s.snapshot = snapshot
-		s.mu.Unlock()
+	for {
+		hits, err := s.hs.Search(q)
+		if err != nil || len(hits) == 0 {
+			return ""
+		}
+		for _, hit := range hits {
+			cand := hit.Cmd.Text
+			if op == storedefs.QLinePrefix {
+				cand = storedefs.MatchingLine(cand, arg, fold)
+			} else if len(cand) <= len(arg) {
+				continue
+			}
+			if cand != "" && s.runnable(cand) {
+				return cand
+			}
+		}
+		if len(hits) < suggestionPage || s.stale(code, gen) {
+			return ""
+		}
+		q.Before = hits[len(hits)-1].Cmd.Seq
 	}
-	return snapshot.cmds
 }
 
 // Finds the first completion candidate for the code, and returns the full
