@@ -215,6 +215,46 @@ func TestRecords(t *testing.T, store storedefs.Store) {
 	if _, err := store.Records("bad", storedefs.KindCmd, 1, 0); err == nil {
 		t.Errorf("store.Records(bad host) => nil error, want error")
 	}
+
+	// Resetting a series removes its records and uncommits the entries they
+	// added; ingesting a record again restores the entry's index without
+	// adding it again.
+	seqAgain, _ := store.AddCmd("again")
+	again, err := store.CommitCmdMeta(storedefs.CmdMeta{Seq: seqAgain, ID: "again", Host: host})
+	if err != nil || again.Idx != tail0+3 {
+		t.Fatalf("CommitCmdMeta(again) => (%+v, %v), want Idx %v", again, err, tail0+3)
+	}
+	if n, err := store.ResetSeries(host, storedefs.KindCmd); err != nil || n != int(tail0)+3 {
+		t.Fatalf("store.ResetSeries => (%v, %v), want %v records removed", n, err, tail0+3)
+	}
+	if got := tail(t, store, host); got != 0 {
+		t.Errorf("tail after reset is %v, want 0", got)
+	}
+	if got := mustMeta(t, store, seqAgain); got.Idx != 0 {
+		t.Errorf("Idx after reset is %v, want 0", got.Idx)
+	}
+	next, _ = store.NextCmdSeq()
+	again.Idx = 1
+	if err := store.Ingest([]storedefs.Record{addRecordOf(again, "again")}); err != nil {
+		t.Fatalf("store.Ingest(again) => %v", err)
+	}
+	if got := mustMeta(t, store, seqAgain); got.Idx != 1 {
+		t.Errorf("Idx after re-ingest is %v, want 1", got.Idx)
+	}
+	if next2, _ := store.NextCmdSeq(); next2 != next {
+		t.Errorf("re-ingest added an entry: next seq %v, was %v", next2, next)
+	}
+	if _, err := store.ResetSeries("bad", storedefs.KindCmd); err == nil {
+		t.Errorf("store.ResetSeries(bad host) => nil error, want error")
+	}
+}
+
+func addRecordOf(meta storedefs.CmdMeta, text string) storedefs.Record {
+	return storedefs.Record{
+		Version: storedefs.RecordVersion, Kind: storedefs.KindCmd, Host: meta.Host, Idx: meta.Idx,
+		Op: storedefs.OpAdd, ID: meta.ID, Time: meta.Time, Text: text,
+		Duration: meta.Duration, Exit: meta.Exit, Dir: meta.Dir, Session: meta.Session,
+	}
 }
 
 func tail(t *testing.T, store storedefs.Store, host string) uint64 {

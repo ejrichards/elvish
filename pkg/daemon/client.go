@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"errors"
+	"io"
 	"net"
 	"sync"
 
@@ -19,6 +20,10 @@ var (
 	ErrDaemonUnreachable = errors.New("daemon offline")
 )
 
+// APIVersion is the version of the daemon API spoken by this package. A daemon
+// reporting a smaller version is outdated.
+const APIVersion = api.Version
+
 // Implementation of the Client interface.
 type client struct {
 	sockPath  string
@@ -30,6 +35,15 @@ type client struct {
 // creation is deferred to the first request.
 func NewClient(sockPath string) daemondefs.Client {
 	return &client{sockPath, nil, sync.WaitGroup{}}
+}
+
+// NewClientConn creates a new Client instance that talks to a daemon over an
+// existing connection, such as the standard streams of an "elvish -relay"
+// process. Closing the client closes the connection. The client cannot
+// reconnect: if the connection shuts down, requests fail with
+// [ErrDaemonUnreachable].
+func NewClientConn(conn io.ReadWriteCloser) daemondefs.Client {
+	return &client{"", rpc.NewClient(conn), sync.WaitGroup{}}
 }
 
 // SockPath returns the socket path that the Client talks to. If the client is
@@ -62,6 +76,10 @@ func (c *client) call(f string, req, res any) error {
 
 	for attempt := 0; attempt < retriesOnShutdown; attempt++ {
 		if c.rpcClient == nil {
+			if c.sockPath == "" {
+				// Created by NewClientConn; there is nothing to redial.
+				break
+			}
 			conn, err := net.Dial("unix", c.sockPath)
 			if err != nil {
 				return err
@@ -209,11 +227,24 @@ func (c *client) Ingest(records []storedefs.Record) error {
 	return c.call("Ingest", req, res)
 }
 
+func (c *client) ResetSeries(host, kind string) (int, error) {
+	req := &api.ResetSeriesRequest{Host: host, Kind: kind}
+	res := &api.ResetSeriesResponse{}
+	err := c.call("ResetSeries", req, res)
+	return res.Removed, err
+}
+
 func (c *client) SearchCmds(q storedefs.CmdQuery) ([]storedefs.CmdHit, error) {
 	req := &api.SearchCmdsRequest{Query: q}
 	res := &api.SearchCmdsResponse{}
 	err := c.call("SearchCmds", req, res)
 	return res.Hits, err
+}
+
+func (c *client) WarmIndex() error {
+	req := &api.WarmIndexRequest{}
+	res := &api.WarmIndexResponse{}
+	return c.call("WarmIndex", req, res)
 }
 
 func (c *client) AddDir(dir string, incFactor float64) error {

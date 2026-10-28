@@ -181,6 +181,89 @@ func recordDeletion(tx *bolt.Tx, host string, meta CmdMeta) error {
 	return tx.Bucket([]byte(bucketIDs)).Put([]byte(meta.ID), deletedMarker)
 }
 
+// Sets the index in the metadata of the entry at key to idx, if it differs.
+// Must be called within a writable transaction.
+func restoreIdx(tx *bolt.Tx, key []byte, idx uint64, updates *[]func(*cmdIndex)) error {
+	metas := tx.Bucket([]byte(bucketCmdMeta))
+	v := metas.Get(key)
+	if v == nil {
+		return nil
+	}
+	var meta CmdMeta
+	if err := json.Unmarshal(v, &meta); err != nil {
+		return err
+	}
+	if meta.Idx == idx {
+		return nil
+	}
+	meta.Idx = idx
+	v, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	if err := metas.Put(key, v); err != nil {
+		return err
+	}
+	*updates = append(*updates, func(ix *cmdIndex) { ix.setMeta(meta) })
+	return nil
+}
+
+// ResetSeries removes every record of a series from the store, and clears
+// the index of the entries those records had added, so that they are
+// uncommitted again. The entries themselves, and any deletions, stay as
+// they are. Returns the number of records removed.
+//
+// This is how a host whose copy of a series has diverged from its peers'
+// gets back in step: reset the series, ingest the peers' copy, which
+// restores the index of entries it has, then commit the rest anew.
+func (s *dbStore) ResetSeries(host, kind string) (int, error) {
+	prefix, err := seriesPrefix(host, kind)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	var updates []func(*cmdIndex)
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		series := tx.Bucket([]byte(bucketSeries))
+		ids := tx.Bucket([]byte(bucketIDs))
+		var keys [][]byte
+		var added []string
+		c := series.Cursor()
+		for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
+			keys = append(keys, append([]byte(nil), k...))
+			var r Record
+			if err := json.Unmarshal(v, &r); err != nil {
+				return err
+			}
+			if r.Op == OpAdd {
+				added = append(added, r.ID)
+			}
+		}
+		for _, k := range keys {
+			if err := series.Delete(k); err != nil {
+				return err
+			}
+		}
+		for _, id := range added {
+			if key := ids.Get([]byte(id)); len(key) == 8 {
+				if err := restoreIdx(tx, key, 0, &updates); err != nil {
+					return err
+				}
+			}
+		}
+		n = len(keys)
+		return nil
+	})
+	if err == nil {
+		s.idx.update(func() {
+			for _, f := range updates {
+				f(s.idx)
+			}
+		})
+	}
+	return n, err
+}
+
 // Status returns the tail index of every series.
 func (s *dbStore) Status() (Status, error) {
 	status := Status{}
@@ -276,9 +359,13 @@ func ingestRecord(tx *bolt.Tx, r Record, updates *[]func(*cmdIndex)) error {
 		if err := putRecord(tx, prefix, r); err != nil {
 			return err
 		}
-		if ids.Get([]byte(r.ID)) != nil {
+		if key := ids.Get([]byte(r.ID)); key != nil {
 			// Already present or deleted; the record is kept for the series
-			// but not projected.
+			// but not projected again. A present entry does get the record's
+			// index, which a ResetSeries may have cleared.
+			if len(key) == 8 {
+				return restoreIdx(tx, key, r.Idx, updates)
+			}
 			return nil
 		}
 		cmds := tx.Bucket([]byte(bucketCmd))

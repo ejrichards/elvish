@@ -36,6 +36,10 @@ func TestSearch(t *testing.T, store storedefs.Store) {
 	s4 := add("git status", &storedefs.CmdMeta{ID: "c", Time: t0.Add(2 * time.Minute), Dir: "/a", Host: host, Session: "y", Exit: 0})
 	s5 := add("echo\n  git log", &storedefs.CmdMeta{ID: "d", Time: t0.Add(3 * time.Minute), Dir: "/a", Host: host, Session: "y", Exit: 0})
 	_ = s1
+	// Warming the index returns at once; queries below wait for the build.
+	if err := store.WarmIndex(); err != nil {
+		t.Fatalf("store.WarmIndex() => error %v", err)
+	}
 
 	search := func(q storedefs.CmdQuery) []int {
 		t.Helper()

@@ -12,6 +12,7 @@ import (
 	"src.elv.sh/pkg/lsp"
 	"src.elv.sh/pkg/prog"
 	"src.elv.sh/pkg/shell"
+	"src.elv.sh/pkg/sync"
 )
 
 func main() {
@@ -19,5 +20,6 @@ func main() {
 		[3]*os.File{os.Stdin, os.Stdout, os.Stderr}, os.Args,
 		prog.Composite(
 			&buildinfo.Program{}, &daemon.Program{}, &lsp.Program{},
+			&sync.Program{},
 			&shell.Program{ActivateDaemon: daemon.Activate})))
 }

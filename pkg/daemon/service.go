@@ -167,6 +167,15 @@ func (s *service) Ingest(req *api.IngestRequest, res *api.IngestResponse) error 
 	return s.store.Ingest(req.Records)
 }
 
+func (s *service) ResetSeries(req *api.ResetSeriesRequest, res *api.ResetSeriesResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	n, err := s.store.ResetSeries(req.Host, req.Kind)
+	res.Removed = n
+	return err
+}
+
 func (s *service) SearchCmds(req *api.SearchCmdsRequest, res *api.SearchCmdsResponse) error {
 	if s.err != nil {
 		return s.err
@@ -174,6 +183,13 @@ func (s *service) SearchCmds(req *api.SearchCmdsRequest, res *api.SearchCmdsResp
 	hits, err := s.store.SearchCmds(req.Query)
 	res.Hits = hits
 	return err
+}
+
+func (s *service) WarmIndex(req *api.WarmIndexRequest, res *api.WarmIndexResponse) error {
+	if s.err != nil {
+		return s.err
+	}
+	return s.store.WarmIndex()
 }
 
 func (s *service) AddDir(req *api.AddDirRequest, res *api.AddDirResponse) error {

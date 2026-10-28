@@ -53,9 +53,10 @@ func libPaths() ([]string, error) {
 	return paths, nil
 }
 
-// Returns a SpawnConfig containing all the paths needed by the daemon. It
-// respects overrides of sock and db from CLI flags.
-func daemonPaths(p *prog.DaemonPaths) (*daemondefs.SpawnConfig, error) {
+// DaemonSpawnConfig returns a SpawnConfig containing all the paths needed by
+// the daemon. It respects overrides of sock and db from CLI flags, and creates
+// the run directory and the directory of the database if they don't exist.
+func DaemonSpawnConfig(p *prog.DaemonPaths) (*daemondefs.SpawnConfig, error) {
 	runDir, err := secureRunDir()
 	if err != nil {
 		return nil, err

@@ -65,6 +65,12 @@ func NewEditor(tty cli.TTY, ev *eval.Evaler, st storedefs.Store) *Editor {
 	if err != nil {
 		_ = err // TODO(xiaq): Report the error.
 	}
+	if st != nil {
+		// Have the daemon build its search index now, in the background, so
+		// that the first history query doesn't wait for it. The call itself
+		// returns at once.
+		_ = st.WarmIndex()
+	}
 	cmdMeta := newCmdMetaTracker(st)
 	ed.AfterCommand = append(ed.AfterCommand, cmdMeta.cmdFinished)
 

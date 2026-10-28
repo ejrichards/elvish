@@ -83,6 +83,7 @@ func Ns(s storedefs.Store) *eval.Ns {
 				}
 				return s.Ingest(records)
 			},
+			"reset-series": s.ResetSeries,
 
 			"search-cmds": func(m vals.Map) ([]vals.Map, error) {
 				q, err := scanCmdQuery(m)

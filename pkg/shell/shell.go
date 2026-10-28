@@ -96,7 +96,7 @@ func (p *Program) Run(fds [3]*os.File, args []string) error {
 	var spawnCfg *daemondefs.SpawnConfig
 	if p.ActivateDaemon != nil {
 		var err error
-		spawnCfg, err = daemonPaths(p.daemonPaths)
+		spawnCfg, err = DaemonSpawnConfig(p.daemonPaths)
 		if err != nil {
 			fmt.Fprintln(fds[2], "Warning:", err)
 			fmt.Fprintln(fds[2], "Storage daemon may not function.")

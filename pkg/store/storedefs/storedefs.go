@@ -63,9 +63,21 @@ type Store interface {
 	// command history, all in one transaction. Each record must extend its
 	// series contiguously, i.e. its index must be the series tail plus one.
 	Ingest(records []Record) error
+	// ResetSeries removes every record of the series identified by host and
+	// kind, and clears the index of the entries those records added, so that
+	// they are uncommitted again; the entries themselves stay. Ingesting a
+	// record for an entry that is present restores its index. Returns the
+	// number of records removed.
+	ResetSeries(host, kind string) (int, error)
 	// SearchCmds returns the command history entries matching the query,
-	// newest first, with their metadata.
+	// newest first, with their metadata. The first query builds the search
+	// index and waits for it.
 	SearchCmds(q CmdQuery) ([]CmdHit, error)
+	// WarmIndex starts building the search index in the background if it
+	// isn't built yet, and returns without waiting. Interactive shells call
+	// it when they connect so that their first query is fast; a store that
+	// only serves writes and syncs never builds the index.
+	WarmIndex() error
 
 	AddDir(dir string, incFactor float64) error
 	DelDir(dir string) error

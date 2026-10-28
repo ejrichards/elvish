@@ -32,7 +32,7 @@ type dbStore struct {
 	hostID      string // cached result of HostID; empty until first read
 
 	// In-memory index of the command history, for queries. Built in the
-	// background from the time the store is opened.
+	// background on the first query or WarmIndex call.
 	idx *cmdIndex
 }
 
@@ -75,20 +75,14 @@ func NewStoreFromDB(db *bolt.DB) (DBStore, error) {
 	if err != nil {
 		return st, err
 	}
-	// Build the index now rather than on the first query, so that the first
-	// query doesn't pay for it. Close waits for the build to finish.
-	st.wg.Add(1)
-	go func() {
-		defer st.wg.Done()
-		if err := st.idx.build(db); err != nil {
-			logger.Printf("failed to build command index: %v", err)
-		}
-	}()
+	// The command index is not built here: a store opened only to serve a
+	// sync never needs it. Interactive shells call WarmIndex when they
+	// connect so that their first query doesn't pay for the build.
 	return st, nil
 }
 
-// Close waits for all outstanding operations to finish, and closes the
-// database.
+// Close waits for all outstanding operations to finish, including an index
+// build if one is running, and closes the database.
 func (s *dbStore) Close() error {
 	if s == nil || s.db == nil {
 		return nil

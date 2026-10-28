@@ -13,10 +13,12 @@ import (
 )
 
 // An in-memory index of the command history, so that queries never read the
-// database. It is built in the background as soon as the store is opened and
-// kept current by every write afterwards. Entries are stored in columns,
-// oldest first, with strings that repeat (directories, hosts, sessions)
-// interned, so that the index costs tens of bytes per entry plus the text.
+// database. It is built in the background the first time it is needed, by a
+// query or by Store.WarmIndex, and kept current by every write afterwards.
+// Until then writes don't touch it: a daemon that only ever serves a sync
+// never builds it. Entries are stored in columns, oldest first, with strings
+// that repeat (directories, hosts, sessions) interned, so that the index
+// costs tens of bytes per entry plus the text.
 //
 // The index belongs to the daemon process, which is the only one with the
 // database open, so it exists once per machine however many shells run.
@@ -24,10 +26,12 @@ type cmdIndex struct {
 	mu sync.RWMutex
 	// Closed when the index has been built and pending updates applied.
 	ready chan struct{}
-	built bool
+	// Whether a build has started, and whether it has finished.
+	started, built bool
 	// Updates that arrived while the index was being built. Replayed once
 	// the build finishes; they are idempotent, since the build may already
-	// have seen their effects.
+	// have seen their effects. Updates from before the build starts are not
+	// kept: the build reads them from the database.
 	pending []func()
 
 	seqs []uint32
@@ -76,9 +80,33 @@ func newCmdIndex() *cmdIndex {
 	return &cmdIndex{ready: make(chan struct{}), off: []uint32{0}}
 }
 
+// Starts building the index in the background, unless a build has already
+// started. The wait group is used to register the build as an outstanding
+// operation on the store.
+func (ix *cmdIndex) start(db *bolt.DB, wg *sync.WaitGroup) {
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	if ix.started {
+		return
+	}
+	// Set before the build goroutine runs, so that any write from now on is
+	// queued and replayed; the build's transaction may or may not see it.
+	ix.started = true
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := ix.build(db); err != nil {
+			logger.Printf("failed to build command index: %v", err)
+		}
+	}()
+}
+
 // Builds the index from the database. Writes that happen meanwhile are queued
 // and applied after.
 func (ix *cmdIndex) build(db *bolt.DB) error {
+	ix.mu.Lock()
+	ix.started = true
+	ix.mu.Unlock()
 	// Metadata that doesn't decode (for example written in an older format)
 	// is skipped: the entry is indexed without it. One bad record must not
 	// cost the whole history.
@@ -153,15 +181,18 @@ func (ix *cmdIndex) reset() {
 }
 
 // Applies an update to the index, or queues it if the index is still being
-// built. Updates must be idempotent.
+// built. Updates must be idempotent. Before a build has started the update
+// is dropped, since the build will read its effect from the database.
 func (ix *cmdIndex) update(f func()) {
 	ix.mu.Lock()
 	defer ix.mu.Unlock()
-	if !ix.built {
+	switch {
+	case !ix.started:
+	case !ix.built:
 		ix.pending = append(ix.pending, f)
-		return
+	default:
+		f()
 	}
-	f()
 }
 
 // Position of the entry with the given sequence number, or -1.
@@ -318,7 +349,16 @@ func (ix *cmdIndex) search(q CmdQuery) ([]CmdHit, error) {
 	return hits, nil
 }
 
-// SearchCmds returns the entries matching the query, newest first.
+// SearchCmds returns the entries matching the query, newest first. The first
+// query builds the index and waits for it.
 func (s *dbStore) SearchCmds(q CmdQuery) ([]CmdHit, error) {
+	s.idx.start(s.db, &s.wg)
 	return s.idx.search(q)
+}
+
+// WarmIndex starts building the index in the background if it hasn't been
+// built, so that the first query doesn't have to wait for it.
+func (s *dbStore) WarmIndex() error {
+	s.idx.start(s.db, &s.wg)
+	return nil
 }

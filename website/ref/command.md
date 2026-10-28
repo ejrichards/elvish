@@ -158,3 +158,30 @@ unless you are debugging daemon functionalities.
 -   `-sock /path/to/socket`: Path to the daemon's UNIX socket. A non-daemon
     process will use this socket to send requests to the daemon, while a daemon
     process will listen on this socket.
+
+## Sync flags
+
+The following flags sync command history between machines over ssh. Every
+machine keeps a full copy; there is no server. The `-db` and `-sock` flags
+apply to both. See
+[Syncing history between machines](../learn/history-sync.html) for setting it
+up.
+
+-   `-sync remote`: Sync command history with `remote`, which is passed to
+    `ssh` as is: `host`, `user@host`, or a `Host` alias from `~/.ssh/config`.
+    Runs `elvish -relay` on the remote, pulls the records this machine is
+    missing and pushes the ones the remote is missing, then prints how many
+    went each way. Both daemons are started if they are not running, and exit
+    afterwards if nothing else is using them. `ssh` is run in batch mode, so
+    the key must not need a passphrase and the host key must already be known.
+
+-   `-reset`: With `-sync`, re-pull this machine's own history from the remote
+    after it has diverged, which `-sync` reports and refuses. This happens
+    when the database is deleted but the host ID beside it is kept, and
+    commands are run before the next sync. Nothing is lost: the commands run
+    since are committed again after the remote's records and pushed.
+
+-   `-relay`: Relay standard input and output to the storage daemon, starting
+    it if necessary, until standard input closes. This is what `-sync` runs on
+    the remote; you shouldn't need to run it yourself, except as the forced
+    command of a restricted key in `authorized_keys`.

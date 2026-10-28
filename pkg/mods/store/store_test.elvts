@@ -123,6 +123,26 @@ Exception: record z: index 3 does not follow series tail 1
 // from and limit
 ~> store:records 01234567-89ab-7def-8123-456789abcdef cmd 2 1 | each {|r| put $r[idx] }
 ▶ (num 2)
+// resetting a series removes its records and uncommits its entries
+~> store:add-cmd baz
+▶ (num 3)
+~> put (store:commit-cmd-meta [&seq=(num 3) &id=b &host=(store:host-id)])[idx]
+▶ (num 3)
+~> store:reset-series (store:host-id) cmd
+▶ (num 3)
+~> has-key (store:status) (store:host-id)
+▶ $false
+~> put (store:cmd-meta 3)[idx]
+▶ (num 0)
+// ingesting the record again restores the index without a second entry
+~> store:ingest [[&v=(num 2) &kind=cmd &host=(store:host-id) &idx=(num 1) &op=add &id=b &text=baz]]
+~> put (store:cmd-meta 3)[idx]
+▶ (num 1)
+~> store:cmds 3 -1
+▶ [&seq=(num 3) &text=baz]
+~> store:reset-series bad cmd
+Exception: bad host ID "bad": invalid uuid
+  [tty]:1:1-26: store:reset-series bad cmd
 
 # searching #
 ~> store:add-cmd 'echo hi'

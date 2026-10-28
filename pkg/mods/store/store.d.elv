@@ -109,6 +109,18 @@ fn records {|host kind from limit| }
 # This is how history from other hosts, or from another shell, is imported.
 fn ingest {|records| }
 
+# Removes every record of the series of `$host` and `$kind`, and clears the
+# `idx` of the entries those records had added, so that they are uncommitted
+# again. The entries themselves, and any deletions, stay. Outputs the number
+# of records removed.
+#
+# This is for getting a series whose local copy has diverged from other
+# hosts' back in step: reset it, [`store:ingest`]() the other hosts' copy,
+# which restores the `idx` of the entries it has, then
+# [`store:commit-cmd-meta`]() every entry of this host left with `idx` 0.
+# `elvish -sync -reset` does exactly this for this host's own series.
+fn reset-series {|host kind| }
+
 # Searches the command history and outputs the matching entries, newest
 # first. The search runs against an in-memory index kept by the daemon, so
 # it is fast however large the history is. The argument is a map with a

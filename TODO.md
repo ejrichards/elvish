@@ -68,23 +68,46 @@ is missing, reject the item and keep searching history. `cd` is handled
 separately: its target must resolve (honouring CDPATH) to a directory other
 than the current one.
 
-### What elvish would need
+### What elvish has now
 
-The command store (`pkg/store/cmd.go`) is a bbolt bucket mapping a sequence
-number to the raw command text, and `storedefs.Cmd` is just `{Text, Seq}`.
-There is nowhere to put per-entry paths. Options:
+The storage half exists as a side effect of the history sync work (see
+`SYNC.md`). Each history entry has a metadata record in the `cmdmeta` bucket
+(`pkg/store/cmdmeta.go`), keyed by seq and JSON-encoded, with id, time,
+duration, exit, host, dir and session. It is backwards compatible: old
+entries have no record and nothing rejects them on that basis.
 
-- **Side bucket** keyed by the same seq, holding the path list (e.g. one
-  newline-separated value, since paths were already parsed from source text
-  and so cannot contain a raw newline after the same `\n` escaping fish uses).
-  Backwards compatible: old entries have no paths and are never rejected on
-  that basis, which matches today's behaviour. Entries from other sessions and
-  older versions keep working.
-- **Change the value format** of the existing bucket to text plus metadata.
-  Needs a version marker and a migration; more invasive for no clear gain.
+The editor writes it in two phases from `cmdMetaTracker` in
+`pkg/edit/cmd_meta.go`: once right after `AddCmd` and once from the
+after-command hook with duration and exit status. The record is held in
+memory between the two writes under the tracker's lock, which is the same
+pending-then-save shape fish uses.
 
-Either way, detection must run off the main goroutine after `AddCmd` (it does
-disk I/O), the entry must be usable for the histlist and history walking
-before detection finishes, and `histStore` / `histSnapshot` need to expose the
-paths so `runnable` can check them. The existing `looksLikePath` heuristic can
-remain as a fallback for entries with no recorded paths.
+### What is left
+
+- [ ] Add a `Paths []string` field to `storedefs.CmdMeta`, with the
+      unexpanded text of each argument that existed when the command was
+      added. Add the `paths` key to `store:set-cmd-meta` and friends.
+- [ ] Detection in the tracker after `AddCmd`: parse the command, take every
+      argument node that is non-empty and does not start with `-`, expand
+      `~` and variables (no command substitution, no wildcards, so `rm *`
+      still suggests in an empty dir), test with `access(F_OK)` relative to
+      the recorded dir, keep the survivors. Run it in a goroutine that
+      updates the pending record under the tracker's lock, and if the
+      completion write has already happened, write again itself. Skip
+      detection for `exit`, `exec` and `echo` like fish does.
+- [ ] Expose paths through `histStore` and `histSnapshot` so `runnable` in
+      `pkg/edit/autosuggestion.go` can check candidates without an RPC per
+      entry. Session entries can carry the paths in memory; entries loaded
+      from the db need `CmdsMeta` alongside `CmdsWithSeq` in the snapshot.
+- [ ] Suggestion-time check in `runnable`: reject a candidate if any recorded
+      path is missing relative to the current directory. `cd` is special:
+      its target must resolve, honouring CDPATH, to a directory other than
+      the current one. Keep the `looksLikePath` heuristic as the fallback
+      for entries with no recorded paths.
+
+### Interaction with sync
+
+Paths ride along in the metadata, so entries imported from another machine
+carry that machine's paths. They are tested against the local directory at
+suggestion time and usually fail, so the entry is rejected rather than
+suggested. That is the correct fish behaviour and needs no extra handling.

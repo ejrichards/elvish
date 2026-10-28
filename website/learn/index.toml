@@ -71,6 +71,12 @@ name = "effective-elvish"
 title = "Effective Elvish"
 group = 2
 
+[[articles]]
+name = "history-sync"
+title = "Syncing history between machines"
+note = "set up an ssh hub, a timer and the prompt hook"
+group = 2
+
 [[groups]]
 intro = "Design and history:"
 
