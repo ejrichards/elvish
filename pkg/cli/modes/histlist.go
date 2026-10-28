@@ -68,9 +68,16 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 		spec.HighlightCmd = func(code string) ui.Text { return ui.T(code) }
 	}
 
+	// The filter starts as the line of the code area the dot is on, so that
+	// what has been typed so far narrows the listing; accepting an entry
+	// replaces that line.
+	buf := codeArea.CopyState().Buffer
+	from, to := lineAtDot(buf)
+	initialFilter := buf.Content[from:to]
+
 	// The initial search is done before building the widget, so that a
 	// store error fails the mode instead of showing an empty list.
-	hits, err := spec.Search("", spec.Dedup())
+	hits, err := spec.Search(initialFilter, spec.Dedup())
 	if err != nil {
 		return nil, fmt.Errorf("db error: %v", err.Error())
 	}
@@ -95,25 +102,29 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 			},
 			RPrompt:     spec.CodeAreaRPrompt,
 			Highlighter: spec.FilterHighlighter,
+			State: tk.CodeAreaState{Buffer: tk.CodeBuffer{
+				Content: initialFilter, Dot: len(initialFilter)}},
 		},
 		ListBox: tk.ListBoxSpec{
 			Bindings: spec.Bindings,
 			OnAccept: func(it tk.Items, i int) {
 				text := it.(histlistItems).cmd(i).Text
 				codeArea.MutateState(func(s *tk.CodeAreaState) {
+					// Replace the line the dot is on, which is what the
+					// filter started from, with the entry.
 					buf := &s.Buffer
-					if buf.Content == "" {
-						buf.InsertAtDot(text)
-					} else {
-						buf.InsertAtDot("\n" + text)
+					from, to := lineAtDot(*buf)
+					*buf = tk.CodeBuffer{
+						Content: buf.Content[:from] + text + buf.Content[to:],
+						Dot:     from + len(text),
 					}
 				})
 				app.PopAddon()
 			},
 		},
 		OnFilter: func(w tk.ComboBox, p string) {
-			// The combo box filters once on creation with an empty filter;
-			// that is the search already done above.
+			// The combo box filters once on creation with the initial
+			// filter; that is the search already done above.
 			if first {
 				first = false
 			} else {
@@ -128,6 +139,17 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 		},
 	})
 	return w, nil
+}
+
+// Returns the byte range of the line of the buffer the dot is on, excluding
+// the newline that ends it.
+func lineAtDot(buf tk.CodeBuffer) (from, to int) {
+	from = strings.LastIndex(buf.Content[:buf.Dot], "\n") + 1
+	to = len(buf.Content)
+	if i := strings.Index(buf.Content[buf.Dot:], "\n"); i != -1 {
+		to = buf.Dot + i
+	}
+	return from, to
 }
 
 // Items of the histlist. Hits are newest first, as returned by the search;

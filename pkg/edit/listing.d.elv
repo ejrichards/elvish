@@ -43,6 +43,10 @@ fn listing:page-down { }
 # good matches, commands run more recently and more often come first. Case is
 # ignored when the filter is all lowercase.
 #
+# The filter starts as the line of the code buffer the cursor is on, so what
+# has been typed so far narrows the listing right away. Accepting an entry
+# replaces that line with the entry and leaves the cursor at its end.
+#
 # The search can be limited to a scope; see
 # [`$edit:histlist:scope`](#$edit:histlist:scope).
 fn histlist:start { }

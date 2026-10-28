@@ -9,6 +9,7 @@ import (
 	. "src.elv.sh/pkg/cli/clitest"
 	"src.elv.sh/pkg/cli/histutil"
 	"src.elv.sh/pkg/cli/term"
+	"src.elv.sh/pkg/cli/tk"
 	"src.elv.sh/pkg/store/storedefs"
 	"src.elv.sh/pkg/ui"
 )
@@ -162,13 +163,40 @@ func TestHistlist(t *testing.T) {
 	f.TTY.Inject(term.K(ui.Enter))
 	f.TestTTY(t, "baz", term.DotHere)
 
-	// Test accepting when there is already some text.
+	// Test starting when there is already some text: the filter starts as
+	// that text, and accepting replaces it.
 	st.AddCmd(storedefs.Cmd{Text: "baz2"})
 	startHistlist(f.App, HistlistSpec{Search: memSearch(st, nil)})
+	f.TestTTY(t,
+		"baz\n",
+		" HISTORY (dedup on)  baz", Styles,
+		"********************    ", term.DotHere, "\n",
+		"   2 baz\n",
+		"   0 baz2                                         ", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++")
 	f.TTY.Inject(term.K(ui.Enter))
-	f.TestTTY(t, "baz",
-		// codearea now contains newly inserted entry on a separate line
-		"\n", "baz2", term.DotHere)
+	f.TestTTY(t, "baz2", term.DotHere)
+}
+
+func TestHistlist_MultiLineBuffer(t *testing.T) {
+	f := Setup(WithSpec(func(spec *cli.AppSpec) {
+		// The dot is on the middle line.
+		spec.CodeAreaState.Buffer = tk.CodeBuffer{Content: "a\nfo\nc", Dot: 3}
+	}))
+	defer f.Stop()
+
+	st := histutil.NewMemStore("foo", "bar")
+	startHistlist(f.App, HistlistSpec{Search: memSearch(st, nil)})
+	// The filter starts as the line the dot is on.
+	f.TestTTY(t,
+		"a\n", "fo\n", "c\n",
+		" HISTORY (dedup on)  fo", Styles,
+		"********************   ", term.DotHere, "\n",
+		"   0 foo                                          ", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+	// Accepting replaces only that line, and leaves the dot at its end.
+	f.TTY.Inject(term.K(ui.Enter))
+	f.TestTTY(t, "a\n", "foo", term.DotHere, "\n", "c")
 }
 
 func TestHistlist_Meta(t *testing.T) {

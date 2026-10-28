@@ -564,14 +564,14 @@ func TestAutosuggestion_HiddenInListingMode(t *testing.T) {
 		" a", Styles,
 		"gg",
 	)
+	// The filter starts as the typed text; the rprompt doesn't fit beside
+	// it on this width.
 	f.TTYCtrl.Inject(term.K('R', ui.Ctrl))
 	f.TestTTY(t,
 		"~> echo", Styles,
 		"   vvvv", "\n",
-		" HISTORY (dedup on)  ", Styles,
-		"******************** ", term.DotHere,
-		"    Ctrl-D dedup Ctrl-R scope\n", Styles,
-		"    ++++++       ++++++      ",
+		" HISTORY (dedup on)  echo", Styles,
+		"********************     ", term.DotHere, "\n",
 		"   1                 echo a                       ", Styles,
 		"+++++++++++++++++++++GGGG+++++++++++++++++++++++++",
 	)
