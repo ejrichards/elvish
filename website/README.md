@@ -28,6 +28,11 @@ dynamically.
 
 ### Additional workflows
 
+-   Run `make embed`, or equivalently `go generate ./pkg/docsite` from the
+    repository root, to copy the built website into `pkg/docsite/site`, where
+    `elvish -docs` embeds it. The copy is not checked in; a binary built
+    without this step serves a placeholder page instead.
+
 -   Run `make check-rellinks` to ensure that relative links between pages are
     valid.
 

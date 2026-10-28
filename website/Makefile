@@ -2,6 +2,7 @@ DST_DIR := ./_dst
 PUBLISH_DIR := ./_publish
 DOCSET_TMP_DIR := ./_docset_tmp
 DOCSET_DST_DIR := ./Elvish.docset
+EMBED_DIR := ../pkg/docsite/site
 
 MDS := home.md $(filter-out %/README.md,$(wildcard [^_]*/*.md))
 HTMLS := $(MDS:.md=.html)
@@ -21,6 +22,13 @@ docset: tools/gensite.bin $(HTMLS)
 publish: gen
 	rsync -aLv --delete ./_dst/ $(PUBLISH_DIR)/
 
+# Copies the generated website into pkg/docsite, where "elvish -docs" embeds
+# it. Symlinks are dereferenced since go:embed refuses them. Run through
+# "go generate ./pkg/docsite". Nothing is deleted: a page removed from the
+# website stays in the embed directory until removed by hand.
+embed: gen
+	cp -RL $(DST_DIR)/. $(EMBED_DIR)/
+
 check-rellinks: gen
 	python3 tools/check-rellinks.py $(DST_DIR)
 
@@ -35,7 +43,7 @@ else
 	@: ttyshot generation disabled by default
 endif
 
-.PHONY: gen docset publish check-rellinks clean
+.PHONY: gen docset publish embed check-rellinks clean
 
 # Don't remove intermediate targets
 .SECONDARY:

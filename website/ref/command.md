@@ -106,6 +106,19 @@ directories:
     [interactively](#using-elvish-interactively) (so can't be used to check the
     [RC file](#rc-file), for example).
 
+-   `-docs`: Serve this documentation website from a copy embedded in the
+    binary, on `127.0.0.1`, and print the URL. Runs until interrupted. Two
+    flags only apply with it:
+
+    -   `-port n`: Port to listen on. The default, 0, picks a free one.
+
+    -   `-browser`: Open the website in a browser. On by default when the port
+        is picked, since the URL isn't known in advance; off by default when
+        `-port` is given. `-browser=false` and `-browser=true` force either.
+
+    Builds made without the website embedded serve a page saying so instead;
+    see `pkg/docsite` in the source tree.
+
 -   `-deprecation-level n`: Show warnings for features deprecated as of version
     0.*n*.
 

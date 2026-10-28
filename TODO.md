@@ -1,5 +1,7 @@
 # TODO
 
+> **Warning: LLM generated text**
+
 ## Autosuggestion: record path arguments in history like fish
 
 ### Problem
@@ -111,3 +113,21 @@ Paths ride along in the metadata, so entries imported from another machine
 carry that machine's paths. They are tested against the local directory at
 suggestion time and usually fail, so the entry is rejected rather than
 suggested. That is the correct fish behaviour and needs no extra handling.
+
+## History sync
+
+The design notes that used to live in SYNC.md are now the package comment of
+`pkg/sync` and the header of `pkg/store/record.go`; setup is in
+`website/learn/history-sync.md`.
+
+- [ ] Bootstrap entries that predate series: give each one with no metadata
+      a fresh id, the local host, zero time and the next index, as add
+      records. Entries with metadata but no record are already re-committed
+      by `elvish -sync -reset`. Not urgent: current stores came from the
+      atuin import and have none.
+- [ ] A default remote, so bare `elvish -sync` means the hub (git's
+      `origin`); the name is reserved for it.
+- [ ] Deletions made between a wipe and a reset are dropped with the series
+      and never reach other hosts. Rare; document or re-record them.
+- [ ] `os:stat` has no mtime, which is why `sync.stamp` carries its time as
+      content and the rc.elv hook compares with `slurp`.

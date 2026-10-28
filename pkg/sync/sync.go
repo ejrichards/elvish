@@ -7,6 +7,17 @@
 // ssh, which exposes the remote's daemon on the ssh session's standard
 // streams. The client then speaks the daemon's own RPC to both daemons and
 // copies records in whichever direction each series is behind.
+//
+// The data model follows atuin's record store: each host's series is an
+// append-only log and the source of truth, the command history is a
+// projection of all series, and final state is the union of adds minus the
+// union of deletes, so there is nothing to merge. Unlike atuin there is no
+// server, no encryption beyond ssh, and any peer relays any series. No state
+// is kept between runs: the cursors are the series tails on both sides.
+//
+// Only command history is synced. Directory history is a decaying score
+// that does not replay as add/delete records; the series key includes a
+// kind so that it, or anything else, can be added later.
 package sync
 
 import (

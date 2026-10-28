@@ -1,0 +1,3 @@
+# The built website, produced by "go generate" (see docsite.go).
+/site/*
+!/site/.gitkeep

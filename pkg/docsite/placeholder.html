@@ -1,0 +1,21 @@
+<!doctype html>
+<!-- Warning: LLM generated text -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Elvish documentation not built in</title>
+<style>
+body { font-family: sans-serif; max-width: 40em; margin: 4em auto; padding: 0 1em; }
+code { background: #eee; padding: 0 0.3em; }
+</style>
+</head>
+<body>
+<h1>Documentation not built in</h1>
+<p>This Elvish binary was built without the website embedded, so
+<code>elvish -docs</code> has nothing to serve.</p>
+<p>To include it, run <code>go generate ./pkg/docsite</code> in the source
+tree, which builds the website with GNU Make and copies it into the package,
+then rebuild Elvish. The online copy is at
+<a href="https://elv.sh">elv.sh</a>.</p>
+</body>
+</html>

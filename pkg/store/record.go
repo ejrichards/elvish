@@ -27,6 +27,18 @@ func init() {
 // Layout of keys in the series bucket: 16 bytes of host ID, one byte of
 // series kind, and the index as a big-endian uint64. The last key under a
 // (host, kind) prefix is the tail of that series.
+//
+// Indexes are assigned inside the write transaction, so they are contiguous
+// without a counter bucket or a retry loop: the daemon is bbolt's only
+// writer. Records are JSON for debuggability (msgpack would save about 40%)
+// with times as integer nanoseconds, since parsing RFC 3339 strings was most
+// of the cost of decoding all metadata at startup.
+//
+// An entry gets its add record only when the command finishes
+// (CommitCmdMeta), so a record is never served half done; between AddCmd
+// and completion the entry exists in the projection only. Ingest applies a
+// batch in one transaction, so one fsync per batch rather than per record,
+// which measured at about 1.7 ms each.
 const (
 	seriesPrefixLen = 16 + 1
 	seriesKeyLen    = seriesPrefixLen + 8

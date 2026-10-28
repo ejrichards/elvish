@@ -1,5 +1,7 @@
 <!-- toc -->
 
+**Warning: LLM generated text**
+
 Elvish can keep command history in step across machines. Every machine holds a
 full copy; there is no server. One always-on machine, the **hub**, is the
 remote every other machine syncs with, and it relays their histories to each

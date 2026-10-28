@@ -1,5 +1,7 @@
 #doc:added-in 0.22
 #
+# **Warning: LLM generated text**
+#
 # A boolean controlling whether [autosuggestions](#autosuggestion) are shown.
 # Defaults to `$true`.
 #
@@ -33,12 +35,16 @@ var autosuggestion:enabled
 
 #doc:added-in 0.22
 #
+# **Warning: LLM generated text**
+#
 # Accepts the currently shown [autosuggestion](#autosuggestion), replacing the
 # content of the buffer with the suggestion. Does nothing if no suggestion is
 # shown.
 fn autosuggestion:accept { }
 
 #doc:added-in 0.22
+#
+# **Warning: LLM generated text**
 #
 # Accepts the currently shown [autosuggestion](#autosuggestion) up to the end
 # of its first [word](#word-types). Does nothing if no suggestion is shown.
