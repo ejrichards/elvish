@@ -121,6 +121,82 @@ func TestAddCmdFilters(t *testing.T) {
 	}
 }
 
+func TestHistoryFilter(t *testing.T) {
+	cases := []struct {
+		name        string
+		rc          string
+		input       string
+		wantHistory []storedefs.Cmd
+	}{
+		{
+			name:        "default value",
+			rc:          "",
+			input:       "cd foo\n",
+			wantHistory: []storedefs.Cmd{{Text: "cd foo", Seq: 1}},
+		},
+		{
+			name:        "match excludes",
+			rc:          "set edit:history-filter = ['^cd ']",
+			input:       "cd foo\n",
+			wantHistory: nil,
+		},
+		{
+			name:        "no match keeps",
+			rc:          "set edit:history-filter = ['^cd ']",
+			input:       "echo cd foo\n",
+			wantHistory: []storedefs.Cmd{{Text: "echo cd foo", Seq: 1}},
+		},
+		{
+			name:        "anchored pattern",
+			rc:          "set edit:history-filter = ['^ls$']",
+			input:       "ls -l\n",
+			wantHistory: []storedefs.Cmd{{Text: "ls -l", Seq: 1}},
+		},
+		{
+			name:        "any pattern matches",
+			rc:          "set edit:history-filter = ['^cd ' '^exit$']",
+			input:       "exit\n",
+			wantHistory: nil,
+		},
+		{
+			name:        "invalid pattern skipped",
+			rc:          "set edit:history-filter = ['(' '^cd ']",
+			input:       "cd foo\n",
+			wantHistory: nil,
+		},
+		{
+			name:        "non-string skipped",
+			rc:          "set edit:history-filter = [$true '^cd ']",
+			input:       "cd foo\n",
+			wantHistory: nil,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := setup(t, rc(c.rc))
+
+			feedInput(f.TTYCtrl, c.input)
+			f.Wait()
+
+			testCommands(t, f.Store, c.wantHistory...)
+		})
+	}
+}
+
+func TestHistoryFilter_RunsBeforeAddCmdFilters(t *testing.T) {
+	f := setup(t, rc(
+		`var called = $false`,
+		`set edit:history-filter = ['^cd ']`,
+		`set edit:add-cmd-filters = [{|_| set called = $true; put $true }]`,
+	))
+
+	feedInput(f.TTYCtrl, "cd foo\n")
+	f.Wait()
+	testCommands(t, f.Store)
+	testGlobal(t, f.Evaler, "called", false)
+}
+
 func TestAddCmdFilters_SkipsRemainingOnFalse(t *testing.T) {
 	f := setup(t, rc(
 		`var called = $false`,

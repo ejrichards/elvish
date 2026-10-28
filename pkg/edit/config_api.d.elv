@@ -23,6 +23,23 @@ var after-readline
 # ignores command starts with space.
 var add-cmd-filters
 
+# List of regular expressions for commands to exclude from history.
+#
+# A command that matches any of the patterns is not saved to history.
+# Patterns use [Go regular expression syntax](https://pkg.go.dev/regexp/syntax)
+# and are not anchored, so use `^` and `$` to match the whole command. This
+# check runs before [`$edit:add-cmd-filters`](#$edit:add-cmd-filters).
+#
+# Example:
+#
+# ```elvish
+# set edit:history-filter = ['^cd ' '^ls$' '^exit$']
+# ```
+#
+# Elements that are not strings or not valid regular expressions are reported
+# and skipped. Defaults to an empty list.
+var history-filter
+
 # Global keybindings, consulted for keys not handled by mode-specific bindings.
 #
 # See [Keybindings](#keybindings).

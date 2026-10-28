@@ -3,6 +3,7 @@ package edit
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"src.elv.sh/pkg/cli"
@@ -47,8 +48,13 @@ func initAddCmdFilters(appSpec *cli.AppSpec, ev *eval.Evaler, nb eval.NsBuilder,
 	filters := newListVar(vals.MakeList(ignoreLeadingSpace))
 	nb.AddVar("add-cmd-filters", filters)
 
+	historyFilter := newListVar(vals.EmptyList)
+	nb.AddVar("history-filter", historyFilter)
+
 	appSpec.AfterReadline = append(appSpec.AfterReadline, func(code string) {
 		if code != "" &&
+			!matchesHistoryFilter("$<edit>:history-filter",
+				historyFilter.Get().(vals.List), code) &&
 			callFilters(ev, "$<edit>:add-cmd-filters",
 				filters.Get().(vals.List), code) {
 			seq, err := s.AddCmd(storedefs.Cmd{Text: code, Seq: -1})
@@ -64,6 +70,31 @@ func initGlobalBindings(appSpec *cli.AppSpec, nt notifier, ev *eval.Evaler, nb e
 	bindingVar := newBindingVar(emptyBindingsMap)
 	appSpec.GlobalBindings = newMapBindings(nt, ev, bindingVar)
 	nb.AddVar("global-binding", bindingVar)
+}
+
+// matchesHistoryFilter reports whether code matches any of the regular
+// expressions in patterns. Elements that are not strings or not valid regular
+// expressions are reported and skipped.
+func matchesHistoryFilter(name string, patterns vals.List, code string) bool {
+	i := -1
+	for it := patterns.Iterator(); it.HasElem(); it.Next() {
+		i++
+		name := fmt.Sprintf("%s[%d]", name, i)
+		pattern, ok := it.Elem().(string)
+		if !ok {
+			complain("%s not string", name)
+			continue
+		}
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			complain("%s invalid regexp: %v", name, err)
+			continue
+		}
+		if re.MatchString(code) {
+			return true
+		}
+	}
+	return false
 }
 
 func callFilters(ev *eval.Evaler, name string, filters vals.List, args ...any) bool {
