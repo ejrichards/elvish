@@ -45,6 +45,35 @@
         rec {
           default = elvish;
 
+          # The website, built by the toolchain under website/. It is a
+          # separate Go module with a local replace pointing at the parent
+          # tree; proxyVendor keeps that replace out of the vendor hash, so
+          # the hash only changes when the website's own dependencies do.
+          docsite = (pkgs.buildGoModule.override { go = pkgs.go_1_27; }) {
+            pname = "elvish-docsite";
+            inherit version;
+            src = ./.;
+            modRoot = "website";
+            proxyVendor = true;
+            vendorHash = "sha256-nckgG2fEX471IUxHHrBI91iEdZb+gS8gPfmHqrLyLcQ=";
+            nativeBuildInputs = [ pkgs.gnumake ];
+            doCheck = false;
+
+            buildPhase = ''
+              runHook preBuild
+              make gen
+              runHook postBuild
+            '';
+
+            # Symlinks are dereferenced since go:embed refuses them.
+            installPhase = ''
+              runHook preInstall
+              mkdir -p $out
+              cp -RL _dst/. $out/
+              runHook postInstall
+            '';
+          };
+
           elvish = buildGoApplication {
             pname = "elvish";
             inherit version;
@@ -63,6 +92,12 @@
               "-X src.elv.sh/pkg/buildinfo.VCSOverride=${vcsOverride}"
               "-X src.elv.sh/pkg/buildinfo.BuildVariant=nix"
             ];
+
+            # Embed the website so that "elvish -docs" works; this is what
+            # "go generate ./pkg/docsite" does outside of Nix.
+            preBuild = ''
+              cp -R ${docsite}/. pkg/docsite/site/
+            '';
 
             # Allows `users.users.<name>.shell = pkgs.elvish;` in NixOS.
             passthru.shellPath = "/bin/elvish";
