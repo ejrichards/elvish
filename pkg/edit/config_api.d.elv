@@ -23,9 +23,18 @@ var after-readline
 # ignores command starts with space.
 var add-cmd-filters
 
-# List of regular expressions for commands to exclude from history.
+# List of regular expressions for commands to keep out of the saved history.
 #
-# A command that matches any of the patterns is not saved to history.
+# A command that matches any of the patterns is not saved to the database,
+# so it is never seen by other sessions, synced to other hosts, or found by
+# the history listing mode or autosuggestion. It is kept in the history of
+# the current session, so it can still be reached with Up
+# ([`edit:history:start`](#edit:history:start)),
+# [`edit:lastcmd:start`](#edit:lastcmd:start) and
+# [`edit:insert-last-word`](#edit:insert-last-word), and is listed by
+# [`edit:command-history`](#edit:command-history), with a negative sequence
+# number.
+#
 # Patterns use [Go regular expression syntax](https://pkg.go.dev/regexp/syntax)
 # and are not anchored, so use `^` and `$` to match the whole command. This
 # check runs before [`$edit:add-cmd-filters`](#$edit:add-cmd-filters).

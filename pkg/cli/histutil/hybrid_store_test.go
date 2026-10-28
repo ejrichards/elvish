@@ -76,6 +76,52 @@ func TestHybridStore_AddCmd_AddsToSessionEvenIfDBErrors(t *testing.T) {
 	}
 }
 
+func TestHybridStore_AddSessionCmd_AddsToSessionOnly(t *testing.T) {
+	db := NewFaultyInMemoryDB("shared 1")
+	f := mustNewHybridStore(db)
+
+	// Session-only commands get negative sequence numbers, and don't take
+	// up numbers in the DB.
+	if seq := f.AddSessionCmd(storedefs.Cmd{Text: "session only 1"}); seq != -1 {
+		t.Errorf("AddSessionCmd -> %v, want -1", seq)
+	}
+	f.AddCmd(storedefs.Cmd{Text: "session 1"})
+	if seq := f.AddSessionCmd(storedefs.Cmd{Text: "session only 2"}); seq != -2 {
+		t.Errorf("AddSessionCmd -> %v, want -2", seq)
+	}
+
+	wantDBCmds := []storedefs.Cmd{
+		{Text: "shared 1", Seq: 0}, {Text: "session 1", Seq: 1}}
+	if dbCmds, _ := db.CmdsWithSeq(-1, -1); !reflect.DeepEqual(dbCmds, wantDBCmds) {
+		t.Errorf("DB commands = %v, want %v", dbCmds, wantDBCmds)
+	}
+
+	allCmds, _ := f.AllCmds()
+	wantAllCmds := []storedefs.Cmd{
+		{Text: "shared 1", Seq: 0},
+		{Text: "session only 1", Seq: -1},
+		{Text: "session 1", Seq: 1},
+		{Text: "session only 2", Seq: -2}}
+	if !reflect.DeepEqual(allCmds, wantAllCmds) {
+		t.Errorf("AllCmds -> %v, want %v", allCmds, wantAllCmds)
+	}
+	// The cursor walks session-only commands like any other.
+	testCursorIteration(t, f.Cursor("session only"), []storedefs.Cmd{
+		{Text: "session only 1", Seq: -1}, {Text: "session only 2", Seq: -2}})
+}
+
+func TestMemStore_AddSessionCmd_IsAddCmd(t *testing.T) {
+	s := NewMemStore("a")
+	if seq := s.AddSessionCmd(storedefs.Cmd{Text: "b", Seq: -1}); seq != 2 {
+		t.Errorf("AddSessionCmd -> %v, want 2", seq)
+	}
+	allCmds, _ := s.AllCmds()
+	wantAllCmds := []storedefs.Cmd{{Text: "a", Seq: 0}, {Text: "b", Seq: 2}}
+	if !reflect.DeepEqual(allCmds, wantAllCmds) {
+		t.Errorf("AllCmds -> %v, want %v", allCmds, wantAllCmds)
+	}
+}
+
 func TestHybridStore_AllCmds_IncludesFrozenSharedAndNewlyAdded(t *testing.T) {
 	db := NewFaultyInMemoryDB("shared 1")
 	f := mustNewHybridStore(db)
@@ -193,7 +239,7 @@ func testCursorIteration(t *testing.T, cursor Cursor, wantCmds []storedefs.Cmd) 
 	expectEndOfHistory()
 }
 
-func mustNewHybridStore(db DB) Store {
+func mustNewHybridStore(db DB) SessionStore {
 	f, err := NewHybridStore(db)
 	if err != nil {
 		panic(err)

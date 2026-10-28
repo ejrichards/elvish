@@ -95,6 +95,7 @@ set listing:binding = (binding-table [
 
 set histlist:binding = (binding-table [
   &Ctrl-D= $histlist:toggle-dedup~
+  &Ctrl-R= $histlist:cycle-scope~
 ])
 
 set navigation:binding = (binding-table [

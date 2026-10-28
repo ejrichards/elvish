@@ -14,8 +14,9 @@ import (
 )
 
 // Returns a Search function over an in-memory store, with the filter text
-// treated like the editor's filter language treats a bare word: a substring
-// match, case-insensitive when the filter is all lowercase.
+// treated like the editor does: a substring match, case-insensitive when the
+// filter is all lowercase, with fuzzy matches of the filter after the exact
+// ones.
 func memSearch(st histutil.Store, metas []storedefs.CmdMeta) func(string, bool) ([]storedefs.CmdHit, error) {
 	var bySeq map[int]storedefs.CmdMeta
 	if metas != nil {
@@ -29,12 +30,68 @@ func memSearch(st histutil.Store, metas []storedefs.CmdMeta) func(string, bool) 
 		if err != nil {
 			return nil, err
 		}
+		fold := filter == strings.ToLower(filter)
 		q := storedefs.CmdQuery{
-			Text:  storedefs.TextQuery{Op: storedefs.QSubstring, Arg: filter, Fold: filter == strings.ToLower(filter)},
+			Text:  storedefs.TextQuery{Op: storedefs.QSubstring, Arg: filter, Fold: fold},
 			Dedup: dedup,
+		}
+		if filter != "" {
+			q.Fuzzy = storedefs.TextQuery{Op: storedefs.QFuzzy, Arg: filter, Fold: fold}
 		}
 		return storedefs.SearchSlice(cmds, bySeq, q)
 	}
+}
+
+func TestHistlist_Fuzzy(t *testing.T) {
+	f := Setup()
+	defer f.Stop()
+
+	st := histutil.NewMemStore(
+		// 0                1              2
+		"nixos-rebuild", "echo rebuld", "ls")
+	startHistlist(f.App, HistlistSpec{
+		Search: memSearch(st, nil), ScopeLabel: func() string { return "dir" }})
+
+	// Entries containing the filter are listed as usual, with fuzzy matches
+	// above them, marked by a dimmed sequence number. The scope label is
+	// shown in the mode line.
+	f.TTY.Inject(term.K('r'), term.K('e'), term.K('b'), term.K('u'), term.K('l'), term.K('d'))
+	f.TestTTY(t,
+		"\n",
+		" HISTORY (dedup on) (dir)  rebuld", Styles,
+		"**************************       ", term.DotHere, "\n",
+		"   0 nixos-rebuild\n", Styles,
+		"ggggg             ",
+		"   1 echo rebuld                                  ", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+
+	// With only fuzzy matches, the best is selected: "ou" is a tighter match
+	// in "echo rebuld" than in "nixos-rebuild".
+	for range 6 {
+		f.TTY.Inject(term.K(ui.Backspace))
+	}
+	f.TTY.Inject(term.K('o'), term.K('u'))
+	f.TestTTY(t,
+		"\n",
+		" HISTORY (dedup on) (dir)  ou", Styles,
+		"**************************   ", term.DotHere, "\n",
+		"   0 nixos-rebuild\n", Styles,
+		"ggggg             ",
+		"   1 echo rebuld                                  ", Styles,
+		"kkkkk+++++++++++++++++++++++++++++++++++++++++++++")
+
+	// An empty scope label shows nothing.
+	f.App.PopAddon()
+	startHistlist(f.App, HistlistSpec{
+		Search: memSearch(st, nil), ScopeLabel: func() string { return "" }})
+	f.TestTTY(t,
+		"\n",
+		" HISTORY (dedup on)  ", Styles,
+		"******************** ", term.DotHere, "\n",
+		"   0 nixos-rebuild\n",
+		"   1 echo rebuld\n",
+		"   2 ls                                           ", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++")
 }
 
 func TestNewHistlist_NoStore(t *testing.T) {

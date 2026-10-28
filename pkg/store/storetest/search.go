@@ -84,6 +84,24 @@ func TestSearch(t *testing.T, store storedefs.Store) {
 	if _, err := store.SearchCmds(storedefs.CmdQuery{Text: storedefs.TextQuery{Op: "nope"}}); err == nil {
 		t.Errorf("bad op: got nil error")
 	}
+	// The secondary fuzzy query adds the entries the primary query misses,
+	// after its matches and ranked by match quality rather than recency.
+	fuzzy := func(s string) storedefs.TextQuery {
+		return storedefs.TextQuery{Op: storedefs.QFuzzy, Arg: s}
+	}
+	check("fuzzy", search(storedefs.CmdQuery{Text: sub("hi"), Fuzzy: fuzzy("hi")}), []int{s2, s5})
+	// "ei" is a tighter match in "echo hi" than in "echo\n  git log".
+	check("fuzzy ranked", search(storedefs.CmdQuery{Text: sub("zzz"), Fuzzy: fuzzy("ei")}), []int{s2, s5})
+	check("fuzzy limit", search(storedefs.CmdQuery{Text: sub("zzz"), Fuzzy: fuzzy("ei"), Limit: 1}), []int{s2})
+	// Fuzzy matches are deduplicated, keeping the newest occurrence.
+	check("fuzzy dedup", search(storedefs.CmdQuery{Text: sub("status"), Fuzzy: fuzzy("s")}), []int{s4, s3})
+	fhits, ferr := store.SearchCmds(storedefs.CmdQuery{Text: sub("hi"), Fuzzy: fuzzy("hi")})
+	if ferr != nil || len(fhits) != 2 || fhits[0].Fuzzy || !fhits[1].Fuzzy || fhits[1].Meta.Dir != "/a" {
+		t.Errorf("fuzzy hits are (%+v, %v), want an exact hit then a fuzzy hit with metadata", fhits, ferr)
+	}
+	if _, err := store.SearchCmds(storedefs.CmdQuery{Fuzzy: storedefs.TextQuery{Op: "nope"}}); err == nil {
+		t.Errorf("bad fuzzy op: got nil error")
+	}
 	// Metadata filters exclude entries without metadata.
 	check("dir", search(storedefs.CmdQuery{Dir: "/a"}), []int{s5, s4, s2})
 	check("dir none", search(storedefs.CmdQuery{Dir: "/nope"}), nil)

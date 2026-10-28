@@ -39,6 +39,10 @@ type HistlistSpec struct {
 	// Dedup is called to determine whether deduplication should be done.
 	// Defaults to true if unset.
 	Dedup func() bool
+	// ScopeLabel is called for a label of the scope the search is limited
+	// to, shown in the mode line. An empty label, or a nil function, shows
+	// nothing.
+	ScopeLabel func() string
 	// Highlighter for the filter text.
 	FilterHighlighter func(string) (ui.Text, []ui.Text)
 	// RPrompt of the code area (first row of the widget).
@@ -81,6 +85,11 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 				if spec.Dedup() {
 					content += "(dedup on) "
 				}
+				if spec.ScopeLabel != nil {
+					if label := spec.ScopeLabel(); label != "" {
+						content += "(" + label + ") "
+					}
+				}
 				return modeLine(content, true)
 			},
 			RPrompt:     spec.CodeAreaRPrompt,
@@ -121,7 +130,9 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 }
 
 // Items of the histlist. Hits are newest first, as returned by the search;
-// the list shows them oldest first, with the newest at the bottom.
+// the list shows them oldest first, with the newest at the bottom. Fuzzy
+// hits, which the search returns after the others ranked best first, thus
+// end up above the exact matches with the best nearest to them.
 type histlistItems struct {
 	hits     []storedefs.CmdHit
 	showMeta bool
@@ -146,13 +157,18 @@ func (it histlistItems) Show(i int) ui.Text {
 	hit := it.hit(i)
 	entry := hit.Cmd
 	// TODO: The alignment of the index works up to 10000 entries.
-	seq := fmt.Sprintf("%4d ", entry.Seq)
+	// The sequence number of a fuzzy hit is dimmed, which marks where the
+	// exact matches end.
+	seq := ui.T(fmt.Sprintf("%4d ", entry.Seq))
+	if hit.Fuzzy {
+		seq = ui.T(fmt.Sprintf("%4d ", entry.Seq), ui.FgBrightBlack)
+	}
 	if !it.showMeta {
-		return ui.Concat(ui.T(seq), it.highlight(entry.Text))
+		return ui.Concat(seq, it.highlight(entry.Text))
 	}
 	m := hit.Meta
 	var tb ui.TextBuilder
-	tb.WriteText(ui.T(seq))
+	tb.WriteText(seq)
 	// A zero duration means the command hasn't finished (or the entry has no
 	// metadata at all), so leave the column blank.
 	if m.Duration == 0 {

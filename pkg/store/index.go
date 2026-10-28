@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	bolt "go.etcd.io/bbolt"
@@ -308,6 +309,7 @@ func (ix *cmdIndex) search(q CmdQuery) ([]CmdHit, error) {
 	if q.Dedup {
 		seen = map[string]struct{}{}
 	}
+	ranker := m.Ranker(time.Now())
 	var hits []CmdHit
 	for i := start; i >= 0; i-- {
 		if ix.deleted[i] || !m.MatchSeq(int(ix.seqs[i])) {
@@ -329,6 +331,13 @@ func (ix *cmdIndex) search(q CmdQuery) ([]CmdHit, error) {
 		}
 		text := ix.textAt(i)
 		if !m.MatchText(text) {
+			// The ranker clones the text of the entries it keeps, since
+			// text borrows from the index.
+			if ranker != nil {
+				if hit := ranker.Add(int(ix.seqs[i]), text); hit != nil && ix.hasMeta[i] {
+					hit.Meta = ix.metaAt(i)
+				}
+			}
 			continue
 		}
 		if seen != nil {
@@ -346,11 +355,12 @@ func (ix *cmdIndex) search(q CmdQuery) ([]CmdHit, error) {
 			break
 		}
 	}
-	return hits, nil
+	return AppendFuzzyHits(hits, ranker, q.Limit), nil
 }
 
-// SearchCmds returns the entries matching the query, newest first. The first
-// query builds the index and waits for it.
+// SearchCmds returns the entries matching the query, newest first, followed
+// by the ranked matches of the secondary fuzzy query if there is one. The
+// first query builds the index and waits for it.
 func (s *dbStore) SearchCmds(q CmdQuery) ([]CmdHit, error) {
 	s.idx.start(s.db, &s.wg)
 	return s.idx.search(q)

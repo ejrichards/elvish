@@ -2,6 +2,8 @@ package edit
 
 import (
 	"os"
+	"slices"
+	"strings"
 
 	"src.elv.sh/pkg/cli"
 	"src.elv.sh/pkg/cli/histutil"
@@ -10,13 +12,14 @@ import (
 	"src.elv.sh/pkg/edit/filter"
 	"src.elv.sh/pkg/edit/highlight"
 	"src.elv.sh/pkg/eval"
+	"src.elv.sh/pkg/eval/errs"
 	"src.elv.sh/pkg/eval/vals"
 	"src.elv.sh/pkg/eval/vars"
 	"src.elv.sh/pkg/store/storedefs"
 	"src.elv.sh/pkg/ui"
 )
 
-func initListings(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore *histStore, nb eval.NsBuilder) {
+func initListings(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore *histStore, cmdMeta *cmdMetaTracker, nb eval.NsBuilder) {
 	bindingVar := newBindingVar(emptyBindingsMap)
 	app := ed.app
 	nb.AddNs("listing",
@@ -35,7 +38,7 @@ func initListings(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore *hi
 				},
 			}))
 
-	initHistlist(ed, ev, st, histStore, bindingVar, nb)
+	initHistlist(ed, ev, st, histStore, cmdMeta, bindingVar, nb)
 	initLastcmd(ed, ev, histStore, bindingVar, nb)
 	initLocation(ed, ev, st, bindingVar, nb)
 }
@@ -51,16 +54,33 @@ var filterSpec = modes.FilterSpec{
 	Highlighter: filter.Highlight,
 }
 
-// How many entries the histlist shows at most. The newest matches are
-// shown; the filter narrows them down. Keeping this bounded is what keeps the
-// mode fast however large the history is: the search runs in the daemon and
-// only this many entries ever reach the editor.
-const histlistLimit = 1000
+// How many entries the histlist shows at most. The newest exact matches come
+// first, then fuzzy matches ranked by quality, so what's cut off is the least
+// relevant. Keeping this bounded is what keeps the mode fast however large
+// the history is: the search runs in the daemon and only this many entries
+// ever reach the editor.
+const histlistLimit = 200
 
-func initHistlist(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore *histStore, commonBindingVar vars.PtrVar, nb eval.NsBuilder) {
+// Scopes of the histlist search, in the order they are cycled through.
+var histlistScopes = []string{"all", "dir", "host", "session"}
+
+func initHistlist(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore *histStore, cmdMeta *cmdMetaTracker, commonBindingVar vars.PtrVar, nb eval.NsBuilder) {
 	bindingVar := newBindingVar(emptyBindingsMap)
 	bindings := newMapBindings(ed, ev, bindingVar, commonBindingVar)
 	dedup := newBoolVar(true)
+	scope := "all"
+	scopeVar := vars.FromSetGet(func(v any) error {
+		s, ok := v.(string)
+		if !ok || !slices.Contains(histlistScopes, s) {
+			return errs.BadValue{What: "$<edit>:histlist:scope",
+				Valid: "one of " + strings.Join(histlistScopes, ", "), Actual: vals.ReprPlain(v)}
+		}
+		scope = s
+		// Refresh the listing if it is open.
+		listingRefilter(ed.app)
+		ed.app.Redraw()
+		return nil
+	}, func() any { return scope })
 	search := func(f string, dedup bool) ([]storedefs.CmdHit, error) {
 		// A filter that doesn't compile (for example while a subfilter is
 		// being typed) matches everything, like in the other listing modes.
@@ -68,10 +88,34 @@ func initHistlist(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore *hi
 		if err != nil {
 			text = storedefs.TextQuery{}
 		}
-		return histStore.Search(storedefs.CmdQuery{Text: text, Dedup: dedup, Limit: histlistLimit})
+		q := storedefs.CmdQuery{Text: text, Dedup: dedup, Limit: histlistLimit}
+		if f != "" {
+			// Entries the filter doesn't match are also tried as fuzzy
+			// matches of the whole filter text, and shown after the exact
+			// matches. Case is ignored when the filter is all lowercase,
+			// like for bare words in the filter language.
+			q.Fuzzy = storedefs.TextQuery{
+				Op: storedefs.QFuzzy, Arg: f, Fold: f == strings.ToLower(f)}
+		}
+		switch scope {
+		case "dir":
+			wd, err := os.Getwd()
+			if err != nil {
+				return nil, err
+			}
+			q.Dir = wd
+		case "host":
+			q.Host = cmdMeta.Host()
+		case "session":
+			q.Session = cmdMeta.Session()
+		}
+		return histStore.Search(q)
 	}
 	ns := eval.BuildNsNamed("edit:histlist").
-		AddVar("binding", bindingVar).
+		AddVars(map[string]vars.Var{
+			"binding": bindingVar,
+			"scope":   scopeVar,
+		}).
 		AddGoFns(map[string]any{
 			"start": func() {
 				w, err := modes.NewHistlist(ed.app, modes.HistlistSpec{
@@ -88,16 +132,29 @@ func initHistlist(ed *Editor, ev *eval.Evaler, st storedefs.Store, histStore *hi
 					Dedup: func() bool {
 						return dedup.Get().(bool)
 					},
+					ScopeLabel: func() string {
+						if scope == "all" {
+							return ""
+						}
+						return scope
+					},
 					FilterHighlighter: filter.Highlight,
 					CodeAreaRPrompt: func() ui.Text {
 						return bindingTips(ed.ns, "histlist:binding",
-							bindingTip("dedup", "histlist:toggle-dedup"))
+							bindingTip("dedup", "histlist:toggle-dedup"),
+							bindingTip("scope", "histlist:cycle-scope"))
 					},
 				})
 				startMode(ed.app, w, err)
 			},
 			"toggle-dedup": func() {
 				dedup.Set(!dedup.Get().(bool))
+				listingRefilter(ed.app)
+				ed.app.Redraw()
+			},
+			"cycle-scope": func() {
+				i := slices.Index(histlistScopes, scope)
+				scope = histlistScopes[(i+1)%len(histlistScopes)]
 				listingRefilter(ed.app)
 				ed.app.Redraw()
 			},

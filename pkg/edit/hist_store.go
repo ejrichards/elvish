@@ -18,7 +18,7 @@ import (
 type histStore struct {
 	m  sync.Mutex
 	db storedefs.Store
-	hs histutil.Store
+	hs histutil.SessionStore
 	// Incremented whenever the content of the store may have changed. Used
 	// for invalidating caches derived from the store.
 	gen uint64
@@ -27,6 +27,9 @@ type histStore struct {
 	upto int
 	// Sequence numbers of commands added since the last FastForward.
 	added []int
+	// Commands added to this session only, with AddSessionCmd. They are not
+	// in the database, so they are added again after each FastForward.
+	sessionOnly []storedefs.Cmd
 }
 
 func newHistStore(db storedefs.Store) (*histStore, error) {
@@ -47,6 +50,18 @@ func (s *histStore) AddCmd(cmd storedefs.Cmd) (int, error) {
 		s.added = append(s.added, seq)
 	}
 	return seq, err
+}
+
+// AddSessionCmd adds a command to this session's history without saving it
+// to the database. It can be walked to and used like any other command of
+// the session, but is not found by Search, which goes to the database.
+func (s *histStore) AddSessionCmd(cmd storedefs.Cmd) int {
+	s.m.Lock()
+	defer s.m.Unlock()
+	s.gen++
+	seq := s.hs.AddSessionCmd(cmd)
+	s.sessionOnly = append(s.sessionOnly, storedefs.Cmd{Text: cmd.Text, Seq: seq})
+	return seq
 }
 
 // Generation returns a number that changes whenever the content of the store
@@ -97,6 +112,12 @@ func (s *histStore) FastForward() error {
 	s.hs = hs
 	s.gen++
 	s.added = nil
+	// Session-only commands aren't in the database the new store reads, so
+	// they are added again, after everything that is. They are numbered the
+	// same as before since they are added in the same order.
+	for _, cmd := range s.sessionOnly {
+		hs.AddSessionCmd(cmd)
+	}
 	if s.db != nil && err == nil {
 		s.upto, err = s.db.NextCmdSeq()
 	}

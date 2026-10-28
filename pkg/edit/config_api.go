@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"src.elv.sh/pkg/cli"
-	"src.elv.sh/pkg/cli/histutil"
 	"src.elv.sh/pkg/diag"
 	"src.elv.sh/pkg/eval"
 	"src.elv.sh/pkg/eval/vals"
@@ -42,7 +41,7 @@ func initAfterReadline(appSpec *cli.AppSpec, ev *eval.Evaler, nb eval.NsBuilder)
 	})
 }
 
-func initAddCmdFilters(appSpec *cli.AppSpec, ev *eval.Evaler, nb eval.NsBuilder, s histutil.Store, meta *cmdMetaTracker) {
+func initAddCmdFilters(appSpec *cli.AppSpec, ev *eval.Evaler, nb eval.NsBuilder, s *histStore, meta *cmdMetaTracker) {
 	ignoreLeadingSpace := eval.NewGoFn("<ignore-cmd-with-leading-space>",
 		func(s string) bool { return !strings.HasPrefix(s, " ") })
 	filters := newListVar(vals.MakeList(ignoreLeadingSpace))
@@ -52,17 +51,24 @@ func initAddCmdFilters(appSpec *cli.AppSpec, ev *eval.Evaler, nb eval.NsBuilder,
 	nb.AddVar("history-filter", historyFilter)
 
 	appSpec.AfterReadline = append(appSpec.AfterReadline, func(code string) {
-		if code != "" &&
-			!matchesHistoryFilter("$<edit>:history-filter",
-				historyFilter.Get().(vals.List), code) &&
-			callFilters(ev, "$<edit>:add-cmd-filters",
-				filters.Get().(vals.List), code) {
+		if code == "" {
+			return
+		}
+		if matchesHistoryFilter("$<edit>:history-filter",
+			historyFilter.Get().(vals.List), code) {
+			// Kept for this session, so that it can still be walked to,
+			// but never saved.
+			s.AddSessionCmd(storedefs.Cmd{Text: code, Seq: -1})
+			return
+		}
+		if callFilters(ev, "$<edit>:add-cmd-filters",
+			filters.Get().(vals.List), code) {
 			seq, err := s.AddCmd(storedefs.Cmd{Text: code, Seq: -1})
 			if err == nil {
 				meta.cmdAdded(code, seq)
 			}
+			// TODO(xiaq): Handle the error.
 		}
-		// TODO(xiaq): Handle the error.
 	})
 }
 

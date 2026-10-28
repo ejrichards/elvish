@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -93,8 +94,8 @@ func TestHistlistAddon(t *testing.T) {
 		"~> \n",
 		" HISTORY (dedup on)  ", Styles,
 		"******************** ", term.DotHere,
-		"                 Ctrl-D dedup\n", Styles,
-		"                 ++++++      ",
+		"    Ctrl-D dedup Ctrl-R scope\n", Styles,
+		"    ++++++       ++++++      ",
 		"   2   22ms   2h ago echo\n", Styles,
 		"       vvvv   ////// vvvv",
 		"   3   1.5s   3d ago ls\n", Styles,
@@ -108,8 +109,8 @@ func TestHistlistAddon(t *testing.T) {
 		"~> \n",
 		" HISTORY  ", Styles,
 		"********* ", term.DotHere,
-		"                            Ctrl-D dedup\n", Styles,
-		"                            ++++++      ",
+		"               Ctrl-D dedup Ctrl-R scope\n", Styles,
+		"               ++++++       ++++++      ",
 		"   1                 ls\n", Styles,
 		"                     vv",
 		"   2   22ms   2h ago echo\n", Styles,
@@ -128,8 +129,8 @@ func TestHistlistAddon(t *testing.T) {
 		"~> \n",
 		" HISTORY (dedup on)  l", Styles,
 		"********************  ", term.DotHere,
-		"                Ctrl-D dedup\n", Styles,
-		"                ++++++      ",
+		"   Ctrl-D dedup Ctrl-R scope\n", Styles,
+		"   ++++++       ++++++      ",
 		"   3   1.5s   3d ago ls\n", Styles,
 		"       !!!!   ////// vv",
 		"   4                 LS                           ", Styles,
@@ -142,11 +143,106 @@ func TestHistlistAddon(t *testing.T) {
 		"~> \n",
 		" HISTORY (dedup on)  L", Styles,
 		"********************  ", term.DotHere,
-		"                Ctrl-D dedup\n", Styles,
-		"                ++++++      ",
+		"   Ctrl-D dedup Ctrl-R scope\n", Styles,
+		"   ++++++       ++++++      ",
 		"   4                 LS                           ", Styles,
 		"+++++++++++++++++++++GG+++++++++++++++++++++++++++",
 	)
+}
+
+func TestHistlistAddon_Fuzzy(t *testing.T) {
+	f := setup(t, storeOp(func(s storedefs.Store) {
+		s.AddCmd("nixos-rebuild")
+		s.AddCmd("echo rebuld")
+		s.AddCmd("ls")
+	}),
+		// Leave room on the mode line for the filter.
+		rc("set edit:histlist:binding = (edit:binding-table [&])"))
+
+	// Entries that contain the filter are listed as usual; those that only
+	// match fuzzily come above them with a dimmed sequence number.
+	f.TTYCtrl.Inject(term.K('R', ui.Ctrl))
+	f.TTYCtrl.Inject(term.K('r'), term.K('e'), term.K('b'), term.K('u'), term.K('l'), term.K('d'))
+	f.TestTTY(t,
+		"~> \n",
+		" HISTORY (dedup on)  rebuld", Styles,
+		"********************       ", term.DotHere, "\n",
+		"   1                 nixos-rebuild\n", Styles,
+		"ggggg                vvvvvvvvvvvvv",
+		"   2                 echo rebuld                  ", Styles,
+		"+++++++++++++++++++++GGGG+++++++++++++++++++++++++",
+	)
+}
+
+func TestHistlistAddon_Scope(t *testing.T) {
+	f := setup(t, storeOp(func(s storedefs.Store) {
+		wd, _ := os.Getwd()
+		host, _ := s.HostID()
+		old := time.Now().Add(-3 * 24 * time.Hour)
+		s.AddCmd("here")
+		s.AddCmd("there")
+		// Entry 3 has no metadata, so it is only in the "all" scope.
+		s.AddCmd("old")
+		s.SetCmdMeta(storedefs.CmdMeta{Seq: 1, Time: old, Duration: 1.5, Dir: wd, Host: host})
+		s.SetCmdMeta(storedefs.CmdMeta{Seq: 2, Time: old, Duration: 1.5, Dir: "/elsewhere", Host: "other"})
+	}),
+		// Leave room on the mode line for the scope.
+		rc("set edit:histlist:binding = (edit:binding-table [&])"))
+
+	f.TTYCtrl.Inject(term.K('R', ui.Ctrl))
+	all := f.MakeBuffer(
+		"~> \n",
+		" HISTORY (dedup on)  ", Styles,
+		"******************** ", term.DotHere, "\n",
+		"   1   1.5s   3d ago here\n", Styles,
+		"       vvvv   ////// vvvv",
+		"   2   1.5s   3d ago there\n", Styles,
+		"       vvvv   ////// vvvvv",
+		"   3                 old                          ", Styles,
+		"+++++++++++++++++++++GGG++++++++++++++++++++++++++",
+	)
+	f.TTYCtrl.TestBuffer(t, all)
+
+	evals(f.Evaler, "edit:histlist:cycle-scope")
+	f.TestTTY(t,
+		"~> \n",
+		" HISTORY (dedup on) (dir)  ", Styles,
+		"************************** ", term.DotHere, "\n",
+		"   1   1.5s   3d ago here                         ", Styles,
+		"+++++++GGGG+++######+GGGG+++++++++++++++++++++++++",
+	)
+	evals(f.Evaler, "edit:histlist:cycle-scope")
+	f.TestTTY(t,
+		"~> \n",
+		" HISTORY (dedup on) (host)  ", Styles,
+		"*************************** ", term.DotHere, "\n",
+		"   1   1.5s   3d ago here                         ", Styles,
+		"+++++++GGGG+++######+GGGG+++++++++++++++++++++++++",
+	)
+
+	// Nothing has been run in this session yet.
+	evals(f.Evaler, "edit:histlist:cycle-scope")
+	f.TestTTY(t,
+		"~> \n",
+		" HISTORY (dedup on) (session)  ", Styles,
+		"****************************** ", term.DotHere)
+
+	evals(f.Evaler, "edit:histlist:cycle-scope")
+	f.TTYCtrl.TestBuffer(t, all)
+
+	// The scope can be set directly, and is validated.
+	evals(f.Evaler, "set edit:histlist:scope = host")
+	f.TestTTY(t,
+		"~> \n",
+		" HISTORY (dedup on) (host)  ", Styles,
+		"*************************** ", term.DotHere, "\n",
+		"   1   1.5s   3d ago here                         ", Styles,
+		"+++++++GGGG+++######+GGGG+++++++++++++++++++++++++",
+	)
+	evals(f.Evaler, "var scope = $edit:histlist:scope")
+	testGlobal(t, f.Evaler, "scope", "host")
+	evals(f.Evaler, "var bad = (bool ?(set edit:histlist:scope = nope))")
+	testGlobal(t, f.Evaler, "bad", false)
 }
 
 func TestLastCmdAddon(t *testing.T) {

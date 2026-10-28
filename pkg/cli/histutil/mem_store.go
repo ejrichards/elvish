@@ -6,8 +6,9 @@ import (
 	"src.elv.sh/pkg/store/storedefs"
 )
 
-// NewMemStore returns a Store that stores command history in memory.
-func NewMemStore(texts ...string) Store {
+// NewMemStore returns a Store that stores command history in memory. All of
+// its history is session history, so AddSessionCmd is the same as AddCmd.
+func NewMemStore(texts ...string) SessionStore {
 	cmds := make([]storedefs.Cmd, len(texts))
 	for i, text := range texts {
 		cmds[i] = storedefs.Cmd{Text: text, Seq: i}
@@ -25,8 +26,18 @@ func (s *memStore) AddCmd(cmd storedefs.Cmd) (int, error) {
 	if cmd.Seq < 0 {
 		cmd.Seq = len(s.cmds) + 1
 	}
-	s.cmds = append(s.cmds, cmd)
+	s.add(cmd)
 	return cmd.Seq, nil
+}
+
+func (s *memStore) AddSessionCmd(cmd storedefs.Cmd) int {
+	seq, _ := s.AddCmd(cmd)
+	return seq
+}
+
+// Adds a command as is, keeping its sequence number even if negative.
+func (s *memStore) add(cmd storedefs.Cmd) {
+	s.cmds = append(s.cmds, cmd)
 }
 
 func (s *memStore) Cursor(prefix string) Cursor {

@@ -37,6 +37,10 @@ const (
 	QPrefix = "prefix"
 	// Some line of the text, after leading spaces and tabs, starts with Arg.
 	QLinePrefix = "line-prefix"
+	// The characters of Arg occur in the text in order, not necessarily
+	// adjacent. As the secondary query of a CmdQuery, matches are scored by
+	// how tight they are; see FuzzyRanker.
+	QFuzzy = "fuzzy"
 )
 
 // Compile returns a function that matches the query against the text of an
@@ -70,6 +74,12 @@ func (q TextQuery) Compile() (func(string) bool, error) {
 			}
 			return false
 		}, nil
+	case QFuzzy:
+		m := newFuzzyMatcher(q.Arg, q.Fold)
+		return func(s string) bool {
+			_, ok := m.Match(s)
+			return ok
+		}, nil
 	case QSubstring:
 		arg := q.Arg
 		if q.Fold {
@@ -98,6 +108,66 @@ func compileSubs(subs []TextQuery) ([]func(string) bool, error) {
 	fs := make([]func(string) bool, len(subs))
 	for i, sub := range subs {
 		f, err := sub.Compile()
+		if err != nil {
+			return nil, err
+		}
+		fs[i] = f
+	}
+	return fs, nil
+}
+
+// CompileScore is like Compile, but the function also scores the match. Only
+// QFuzzy matches have a score of their own; an "and" sums the scores of its
+// sub-queries and an "or" takes the best, so that the score of a query tree
+// is dominated by its fuzzy parts. Other matches score 0.
+func (q TextQuery) CompileScore() (func(string) (int, bool), error) {
+	switch q.Op {
+	case "", QAnd:
+		subs, err := compileScoreSubs(q.Subs)
+		if err != nil {
+			return nil, err
+		}
+		return func(s string) (int, bool) {
+			total := 0
+			for _, sub := range subs {
+				score, ok := sub(s)
+				if !ok {
+					return 0, false
+				}
+				total += score
+			}
+			return total, true
+		}, nil
+	case QOr:
+		subs, err := compileScoreSubs(q.Subs)
+		if err != nil {
+			return nil, err
+		}
+		return func(s string) (int, bool) {
+			best, matched := 0, false
+			for _, sub := range subs {
+				if score, ok := sub(s); ok && (!matched || score > best) {
+					best, matched = score, true
+				}
+			}
+			return best, matched
+		}, nil
+	case QFuzzy:
+		m := newFuzzyMatcher(q.Arg, q.Fold)
+		return m.Match, nil
+	default:
+		f, err := q.Compile()
+		if err != nil {
+			return nil, err
+		}
+		return func(s string) (int, bool) { return 0, f(s) }, nil
+	}
+}
+
+func compileScoreSubs(subs []TextQuery) ([]func(string) (int, bool), error) {
+	fs := make([]func(string) (int, bool), len(subs))
+	for i, sub := range subs {
+		f, err := sub.CompileScore()
 		if err != nil {
 			return nil, err
 		}
@@ -145,6 +215,13 @@ func hasPrefix(s, prefix string, fold bool) bool {
 type CmdQuery struct {
 	// Query against the text of entries.
 	Text TextQuery
+	// Secondary query against the text of entries, used when its Op is set.
+	// Entries that pass the other filters and match Fuzzy but not Text are
+	// appended after the entries matching Text, ranked by how well they
+	// match (see FuzzyRanker) rather than by recency, and always
+	// deduplicated. This lets a listing show the exact matches in their
+	// usual order, with looser matches after them.
+	Fuzzy TextQuery
 
 	// Metadata filters. Empty values mean no filter. Entries without
 	// metadata only pass filters that are not set.
@@ -183,6 +260,9 @@ type CmdHit struct {
 	// them in the index saves tens of bytes per entry. Use Store.CmdMeta to
 	// get them for a specific entry.
 	Meta CmdMeta
+	// Whether the entry matched the query's secondary fuzzy query rather
+	// than its primary text query.
+	Fuzzy bool
 }
 
 // CmdMatcher matches individual entries against a CmdQuery, except for the
@@ -190,7 +270,9 @@ type CmdHit struct {
 type CmdMatcher struct {
 	q    CmdQuery
 	text func(string) bool
-	own  map[int]struct{}
+	// Nil if the query has no secondary fuzzy query.
+	fuzzy func(string) (int, bool)
+	own   map[int]struct{}
 }
 
 // Matcher compiles the query into a CmdMatcher.
@@ -200,6 +282,12 @@ func (q CmdQuery) Matcher() (*CmdMatcher, error) {
 		return nil, err
 	}
 	m := &CmdMatcher{q: q, text: text}
+	if q.Fuzzy.Op != "" {
+		m.fuzzy, err = q.Fuzzy.CompileScore()
+		if err != nil {
+			return nil, err
+		}
+	}
 	if len(q.Own) > 0 {
 		m.own = make(map[int]struct{}, len(q.Own))
 		for _, seq := range q.Own {
@@ -264,8 +352,33 @@ func (m *CmdMatcher) MatchMeta(meta *CmdMeta) bool {
 	return true
 }
 
-// MatchText reports whether an entry's text matches the query.
+// MatchText reports whether an entry's text matches the query's primary text
+// query.
 func (m *CmdMatcher) MatchText(text string) bool { return m.text(text) }
+
+// Ranker returns a FuzzyRanker for the query's secondary fuzzy query, or nil
+// if it has none. The time is used to compute the frecency of candidates.
+func (m *CmdMatcher) Ranker(now time.Time) *FuzzyRanker {
+	if m.fuzzy == nil {
+		return nil
+	}
+	return &FuzzyRanker{fuzzy: m.fuzzy, now: now, idx: map[string]int{}}
+}
+
+// AppendFuzzyHits appends the ranked hits of the ranker to hits, within the
+// query's limit. It is a no-op if the ranker is nil.
+func AppendFuzzyHits(hits []CmdHit, r *FuzzyRanker, limit int) []CmdHit {
+	if r == nil {
+		return hits
+	}
+	if limit > 0 {
+		limit -= len(hits)
+		if limit <= 0 {
+			return hits
+		}
+	}
+	return append(hits, r.Hits(limit)...)
+}
 
 // SearchSlice runs a query over entries held in memory, oldest first, with
 // metadata keyed by sequence number. It is the reference implementation of
@@ -275,6 +388,7 @@ func SearchSlice(cmds []Cmd, metas map[int]CmdMeta, q CmdQuery) ([]CmdHit, error
 	if err != nil {
 		return nil, err
 	}
+	ranker := m.Ranker(time.Now())
 	var hits []CmdHit
 	var seen map[string]struct{}
 	if q.Dedup {
@@ -288,8 +402,17 @@ func SearchSlice(cmds []Cmd, metas map[int]CmdMeta, q CmdQuery) ([]CmdHit, error
 		var meta *CmdMeta
 		if mt, ok := metas[cmd.Seq]; ok {
 			meta = &mt
+			meta.ID, meta.Idx = "", 0
 		}
-		if !m.Match(cmd.Seq, cmd.Text, meta) {
+		if !m.MatchSeq(cmd.Seq) || !m.MatchMeta(meta) {
+			continue
+		}
+		if !m.MatchText(cmd.Text) {
+			if ranker != nil {
+				if hit := ranker.Add(cmd.Seq, cmd.Text); hit != nil && meta != nil {
+					hit.Meta = *meta
+				}
+			}
 			continue
 		}
 		if seen != nil {
@@ -301,12 +424,11 @@ func SearchSlice(cmds []Cmd, metas map[int]CmdMeta, q CmdQuery) ([]CmdHit, error
 		hit := CmdHit{Cmd: cmd}
 		if meta != nil {
 			hit.Meta = *meta
-			hit.Meta.ID, hit.Meta.Idx = "", 0
 		}
 		hits = append(hits, hit)
 		if q.Limit > 0 && len(hits) >= q.Limit {
 			break
 		}
 	}
-	return hits, nil
+	return AppendFuzzyHits(hits, ranker, q.Limit), nil
 }

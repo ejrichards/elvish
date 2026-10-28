@@ -570,8 +570,8 @@ func TestAutosuggestion_HiddenInListingMode(t *testing.T) {
 		"   vvvv", "\n",
 		" HISTORY (dedup on)  ", Styles,
 		"******************** ", term.DotHere,
-		"                 Ctrl-D dedup\n", Styles,
-		"                 ++++++      ",
+		"    Ctrl-D dedup Ctrl-R scope\n", Styles,
+		"    ++++++       ++++++      ",
 		"   1                 echo a                       ", Styles,
 		"+++++++++++++++++++++GGGG+++++++++++++++++++++++++",
 	)

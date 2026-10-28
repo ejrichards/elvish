@@ -34,13 +34,24 @@ func newCmdMetaTracker(st storedefs.Store) *cmdMetaTracker {
 
 // Must be called with t.m held.
 func (t *cmdMetaTracker) hostID() string {
-	if t.host == "" {
+	if t.host == "" && t.st != nil {
 		if id, err := t.st.HostID(); err == nil {
 			t.host = id
 		}
 	}
 	return t.host
 }
+
+// Host returns the ID of this host, or "" if there is no store or it can't
+// be fetched.
+func (t *cmdMetaTracker) Host() string {
+	t.m.Lock()
+	defer t.m.Unlock()
+	return t.hostID()
+}
+
+// Session returns the ID of this interactive session.
+func (t *cmdMetaTracker) Session() string { return t.session }
 
 // Records the initial metadata of a command that has just been added to the
 // history with the given sequence number.

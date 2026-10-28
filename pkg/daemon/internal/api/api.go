@@ -8,7 +8,7 @@ import (
 
 // Version is the API version. It should be bumped (increased) any time the API
 // changes: a client treats a daemon reporting a smaller version as outdated.
-const Version = -91
+const Version = -90
 
 // ServiceName is the name of the RPC service exposed by the daemon.
 const ServiceName = "Daemon"

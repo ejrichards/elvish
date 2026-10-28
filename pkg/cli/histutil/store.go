@@ -20,6 +20,16 @@ type Store interface {
 	Cursor(prefix string) Cursor
 }
 
+// SessionStore is a Store that keeps a session history apart from the shared
+// history: commands added with AddSessionCmd are seen by this session only.
+type SessionStore interface {
+	Store
+	// AddSessionCmd adds a command to the session history only, and returns
+	// its sequence number. In a store backed by a database, the number is
+	// negative, so that it can't be mistaken for that of a saved command.
+	AddSessionCmd(cmd storedefs.Cmd) int
+}
+
 // Cursor is used to navigate a Store.
 type Cursor interface {
 	// Prev moves the cursor to the previous command.

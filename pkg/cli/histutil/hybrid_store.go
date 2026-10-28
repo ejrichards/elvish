@@ -4,7 +4,7 @@ import "src.elv.sh/pkg/store/storedefs"
 
 // NewHybridStore returns a store that provides a view of all the commands that
 // exists in the database, plus a in-memory session history.
-func NewHybridStore(db DB) (Store, error) {
+func NewHybridStore(db DB) (SessionStore, error) {
 	if db == nil {
 		return NewMemStore(), nil
 	}
@@ -12,20 +12,32 @@ func NewHybridStore(db DB) (Store, error) {
 	if err != nil {
 		return NewMemStore(), err
 	}
-	return hybridStore{dbStore, NewMemStore()}, nil
+	return &hybridStore{shared: dbStore, session: &memStore{}}, nil
 }
 
 type hybridStore struct {
-	shared, session Store
+	shared  Store
+	session *memStore
+	// Number of commands added with AddSessionCmd, which numbers them.
+	sessionOnly int
 }
 
-func (s hybridStore) AddCmd(cmd storedefs.Cmd) (int, error) {
+func (s *hybridStore) AddCmd(cmd storedefs.Cmd) (int, error) {
 	seq, err := s.shared.AddCmd(cmd)
 	s.session.AddCmd(storedefs.Cmd{Text: cmd.Text, Seq: seq})
 	return seq, err
 }
 
-func (s hybridStore) AllCmds() ([]storedefs.Cmd, error) {
+// AddSessionCmd adds a command to the session history only. Session-only
+// commands are numbered -1, -2 and so on.
+func (s *hybridStore) AddSessionCmd(cmd storedefs.Cmd) int {
+	s.sessionOnly++
+	seq := -s.sessionOnly
+	s.session.add(storedefs.Cmd{Text: cmd.Text, Seq: seq})
+	return seq
+}
+
+func (s *hybridStore) AllCmds() ([]storedefs.Cmd, error) {
 	shared, err := s.shared.AllCmds()
 	session, err2 := s.session.AllCmds()
 	if err == nil {
@@ -37,7 +49,7 @@ func (s hybridStore) AllCmds() ([]storedefs.Cmd, error) {
 	return append(shared, session...), err
 }
 
-func (s hybridStore) Cursor(prefix string) Cursor {
+func (s *hybridStore) Cursor(prefix string) Cursor {
 	return &hybridStoreCursor{
 		s.shared.Cursor(prefix), s.session.Cursor(prefix), false}
 }
