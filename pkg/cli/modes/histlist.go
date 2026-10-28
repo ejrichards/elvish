@@ -45,7 +45,7 @@ type HistlistSpec struct {
 	ScopeLabel func() string
 	// Highlighter for the filter text.
 	FilterHighlighter func(string) (ui.Text, []ui.Text)
-	// RPrompt of the code area (first row of the widget).
+	// RPrompt of the code area (last row of the widget).
 	CodeAreaRPrompt func() ui.Text
 }
 
@@ -87,6 +87,9 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 	}
 	first := true
 	w := tk.NewComboBox(tk.ComboBoxSpec{
+		// The newest entries are at the bottom of the list, so the filter is
+		// shown below the list to keep it next to them.
+		CodeAreaBelow: true,
 		CodeArea: tk.CodeAreaSpec{
 			Prompt: func() ui.Text {
 				content := " HISTORY "

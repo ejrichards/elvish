@@ -59,12 +59,12 @@ func TestHistlist_Fuzzy(t *testing.T) {
 	f.TTY.Inject(term.K('r'), term.K('e'), term.K('b'), term.K('u'), term.K('l'), term.K('d'))
 	f.TestTTY(t,
 		"\n",
-		" HISTORY (dedup on) (dir)  rebuld", Styles,
-		"**************************       ", term.DotHere, "\n",
 		"   0 nixos-rebuild\n", Styles,
 		"ggggg             ",
-		"   1 echo rebuld                                  ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+		"   1 echo rebuld                                  \n", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		" HISTORY (dedup on) (dir)  rebuld", Styles,
+		"**************************       ", term.DotHere)
 
 	// With only fuzzy matches, the best is selected: "ou" is a tighter match
 	// in "echo rebuld" than in "nixos-rebuild".
@@ -74,12 +74,12 @@ func TestHistlist_Fuzzy(t *testing.T) {
 	f.TTY.Inject(term.K('o'), term.K('u'))
 	f.TestTTY(t,
 		"\n",
-		" HISTORY (dedup on) (dir)  ou", Styles,
-		"**************************   ", term.DotHere, "\n",
 		"   0 nixos-rebuild\n", Styles,
 		"ggggg             ",
-		"   1 echo rebuld                                  ", Styles,
-		"kkkkk+++++++++++++++++++++++++++++++++++++++++++++")
+		"   1 echo rebuld                                  \n", Styles,
+		"kkkkk+++++++++++++++++++++++++++++++++++++++++++++",
+		" HISTORY (dedup on) (dir)  ou", Styles,
+		"**************************   ", term.DotHere)
 
 	// An empty scope label shows nothing.
 	f.App.PopAddon()
@@ -87,12 +87,12 @@ func TestHistlist_Fuzzy(t *testing.T) {
 		Search: memSearch(st, nil), ScopeLabel: func() string { return "" }})
 	f.TestTTY(t,
 		"\n",
-		" HISTORY (dedup on)  ", Styles,
-		"******************** ", term.DotHere, "\n",
 		"   0 nixos-rebuild\n",
 		"   1 echo rebuld\n",
-		"   2 ls                                           ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+		"   2 ls                                           \n", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  ", Styles,
+		"******************** ", term.DotHere)
 }
 
 func TestNewHistlist_NoStore(t *testing.T) {
@@ -139,25 +139,25 @@ func TestHistlist(t *testing.T) {
 		"foo", "bar", "baz")
 	startHistlist(f.App, HistlistSpec{Search: memSearch(st, nil)})
 
-	// Test initial UI - last item selected
+	// Test initial UI - last item selected, with the filter below the list.
 	f.TestTTY(t,
 		"\n",
-		" HISTORY (dedup on)  ", Styles,
-		"******************** ", term.DotHere, "\n",
 		"   0 foo\n",
 		"   1 bar\n",
-		"   2 baz                                          ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+		"   2 baz                                          \n", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  ", Styles,
+		"******************** ", term.DotHere)
 
 	// Test filtering.
 	f.TTY.Inject(term.K('b'))
 	f.TestTTY(t,
 		"\n",
-		" HISTORY (dedup on)  b", Styles,
-		"********************  ", term.DotHere, "\n",
 		"   1 bar\n",
-		"   2 baz                                          ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+		"   2 baz                                          \n", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  b", Styles,
+		"********************  ", term.DotHere)
 
 	// Test accepting.
 	f.TTY.Inject(term.K(ui.Enter))
@@ -169,11 +169,11 @@ func TestHistlist(t *testing.T) {
 	startHistlist(f.App, HistlistSpec{Search: memSearch(st, nil)})
 	f.TestTTY(t,
 		"baz\n",
-		" HISTORY (dedup on)  baz", Styles,
-		"********************    ", term.DotHere, "\n",
 		"   2 baz\n",
-		"   0 baz2                                         ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+		"   0 baz2                                         \n", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  baz", Styles,
+		"********************    ", term.DotHere)
 	f.TTY.Inject(term.K(ui.Enter))
 	f.TestTTY(t, "baz2", term.DotHere)
 }
@@ -190,10 +190,10 @@ func TestHistlist_MultiLineBuffer(t *testing.T) {
 	// The filter starts as the line the dot is on.
 	f.TestTTY(t,
 		"a\n", "fo\n", "c\n",
+		"   0 foo                                          \n", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++",
 		" HISTORY (dedup on)  fo", Styles,
-		"********************   ", term.DotHere, "\n",
-		"   0 foo                                          ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+		"********************   ", term.DotHere)
 	// Accepting replaces only that line, and leaves the dot at its end.
 	f.TTY.Inject(term.K(ui.Enter))
 	f.TestTTY(t, "a\n", "foo", term.DotHere, "\n", "c")
@@ -224,29 +224,29 @@ func TestHistlist_Meta(t *testing.T) {
 
 	f.TestTTY(t,
 		"\n",
-		" HISTORY (dedup on)  ", Styles,
-		"******************** ", term.DotHere, "\n",
 		"   0                 foo\n", Styles,
 		"                     ---",
 		"   1   22ms  20s ago bar\n", Styles,
 		"       vvvv  /////// ---",
 		"   2  1m30s   3h ago baz\n", Styles,
 		"      !!!!!   ////// ---",
-		"   3          5m ago box                          ", Styles,
-		"++++++++++++++######+XXX++++++++++++++++++++++++++")
+		"   3          5m ago box                          \n", Styles,
+		"++++++++++++++######+XXX++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  ", Styles,
+		"******************** ", term.DotHere)
 
 	// Metadata and highlighting are kept when filtering.
 	f.TTY.Inject(term.K('b'))
 	f.TestTTY(t,
 		"\n",
-		" HISTORY (dedup on)  b", Styles,
-		"********************  ", term.DotHere, "\n",
 		"   1   22ms  20s ago bar\n", Styles,
 		"       vvvv  /////// ---",
 		"   2  1m30s   3h ago baz\n", Styles,
 		"      !!!!!   ////// ---",
-		"   3          5m ago box                          ", Styles,
-		"++++++++++++++######+XXX++++++++++++++++++++++++++")
+		"   3          5m ago box                          \n", Styles,
+		"++++++++++++++######+XXX++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  b", Styles,
+		"********************  ", term.DotHere)
 }
 
 func TestHistlist_HighlightWithoutMeta(t *testing.T) {
@@ -260,12 +260,12 @@ func TestHistlist_HighlightWithoutMeta(t *testing.T) {
 	})
 	f.TestTTY(t,
 		"\n",
-		" HISTORY (dedup on)  ", Styles,
-		"******************** ", term.DotHere, "\n",
 		"   0 foo\n", Styles,
 		"     ---",
-		"   1 bar                                          ", Styles,
-		"+++++XXX++++++++++++++++++++++++++++++++++++++++++")
+		"   1 bar                                          \n", Styles,
+		"+++++XXX++++++++++++++++++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  ", Styles,
+		"******************** ", term.DotHere)
 }
 
 func TestHistlist_SearchErrorWhileFiltering(t *testing.T) {
@@ -345,12 +345,12 @@ func TestHistlist_Dedup(t *testing.T) {
 		HistlistSpec{Search: memSearch(st, nil), Dedup: func() bool { return false }})
 	f.TestTTY(t,
 		"\n",
-		" HISTORY  ", Styles,
-		"********* ", term.DotHere, "\n",
 		"   0 ls\n",
 		"   1 echo\n",
-		"   2 ls                                           ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+		"   2 ls                                           \n", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		" HISTORY  ", Styles,
+		"********* ", term.DotHere)
 
 	f.App.PopAddon()
 
@@ -359,11 +359,11 @@ func TestHistlist_Dedup(t *testing.T) {
 		HistlistSpec{Search: memSearch(st, nil), Dedup: func() bool { return true }})
 	f.TestTTY(t,
 		"\n",
-		" HISTORY (dedup on)  ", Styles,
-		"******************** ", term.DotHere, "\n",
 		"   1 echo\n",
-		"   2 ls                                           ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+		"   2 ls                                           \n", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  ", Styles,
+		"******************** ", term.DotHere)
 }
 
 func TestHistlist_CustomSearch(t *testing.T) {
@@ -387,11 +387,11 @@ func TestHistlist_CustomSearch(t *testing.T) {
 	f.TTY.Inject(term.K('v'), term.K('i'), term.K('$'))
 	f.TestTTY(t,
 		"\n",
-		" HISTORY (dedup on)  vi$", Styles,
-		"******************** +++", term.DotHere, "\n",
 		"   0 vi\n",
-		"   2 nvi                                          ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+		"   2 nvi                                          \n", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  vi$", Styles,
+		"******************** +++", term.DotHere)
 }
 
 func startHistlist(app cli.App, spec HistlistSpec) {

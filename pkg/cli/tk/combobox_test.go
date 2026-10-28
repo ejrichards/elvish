@@ -38,6 +38,32 @@ var comboBoxRenderTests = []renderTest{
 			Newline().Write("item 0    ", ui.Inverse).
 			Newline().Write("item 1"),
 	},
+	{
+		Name: "rendering codearea below listbox",
+		Given: NewComboBox(ComboBoxSpec{
+			CodeAreaBelow: true,
+			CodeArea: CodeAreaSpec{
+				State: CodeAreaState{
+					Buffer: CodeBuffer{Content: "filter", Dot: 6}}},
+			ListBox: ListBoxSpec{
+				State: ListBoxState{Items: TestItems{NItems: 2}}}}),
+		Width: 10, Height: 24,
+		Want: term.NewBufferBuilder(10).
+			Write("item 0    ", ui.Inverse).
+			Newline().Write("item 1").
+			Newline().Write("filter").SetDotHere(),
+	},
+	{
+		Name: "rendering codearea below empty listbox",
+		Given: NewComboBox(ComboBoxSpec{
+			CodeAreaBelow: true,
+			CodeArea: CodeAreaSpec{
+				State: CodeAreaState{
+					Buffer: CodeBuffer{Content: "filter", Dot: 6}}}}),
+		Width: 10, Height: 24,
+		Want: term.NewBufferBuilder(10).
+			Write("filter").SetDotHere(),
+	},
 }
 
 func TestComboBox_Render(t *testing.T) {

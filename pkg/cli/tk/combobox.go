@@ -20,12 +20,15 @@ type ComboBoxSpec struct {
 	CodeArea CodeAreaSpec
 	ListBox  ListBoxSpec
 	OnFilter func(ComboBox, string)
+	// Whether to show the codearea below the listbox instead of above it.
+	CodeAreaBelow bool
 }
 
 type comboBox struct {
-	codeArea CodeArea
-	listBox  ListBox
-	OnFilter func(ComboBox, string)
+	codeArea      CodeArea
+	listBox       ListBox
+	OnFilter      func(ComboBox, string)
+	codeAreaBelow bool
 
 	// Last filter value.
 	lastFilter string
@@ -37,9 +40,10 @@ func NewComboBox(spec ComboBoxSpec) ComboBox {
 		spec.OnFilter = func(ComboBox, string) {}
 	}
 	w := &comboBox{
-		codeArea: NewCodeArea(spec.CodeArea),
-		listBox:  NewListBox(spec.ListBox),
-		OnFilter: spec.OnFilter,
+		codeArea:      NewCodeArea(spec.CodeArea),
+		listBox:       NewListBox(spec.ListBox),
+		OnFilter:      spec.OnFilter,
+		codeAreaBelow: spec.CodeAreaBelow,
 	}
 	// The initial filter is whatever the code area starts with, so that a
 	// seeded filter is applied right away.
@@ -48,23 +52,32 @@ func NewComboBox(spec ComboBoxSpec) ComboBox {
 	return w
 }
 
-// Render renders the codearea and the listbox below it.
+// Render renders the codearea and the listbox, one below the other. The
+// codearea is on top unless CodeAreaBelow is set.
 func (w *comboBox) Render(width, height int) *term.Buffer {
 	// TODO: Test the behavior of Render when height is very small
 	// (https://b.elv.sh/1820)
+	items := w.listBox.CopyState().Items
+	empty := items == nil || items.Len() == 0
 	if height == 1 {
 		// This could be caused by either the listbox being empty, or the
 		// terminal actually being very short.
-		if w.listBox.CopyState().Items.Len() == 0 {
+		if empty {
 			return w.codeArea.Render(width, height)
 		} else {
 			return w.listBox.Render(width, height)
 		}
 	}
-	buf := w.codeArea.Render(width, height-1)
-	bufListBox := w.listBox.Render(width, height-len(buf.Lines))
-	buf.ExtendDown(bufListBox, false)
-	return buf
+	bufCodeArea := w.codeArea.Render(width, height-1)
+	if empty && w.codeAreaBelow {
+		// An empty listbox would still take up a line above the codearea.
+		return bufCodeArea
+	}
+	bufListBox := w.listBox.Render(width, height-len(bufCodeArea.Lines))
+	if w.codeAreaBelow {
+		return bufListBox.ExtendDown(bufCodeArea, true)
+	}
+	return bufCodeArea.ExtendDown(bufListBox, false)
 }
 
 func (w *comboBox) MaxHeight(width, height int) int {

@@ -92,33 +92,33 @@ func TestHistlistAddon(t *testing.T) {
 	f.TTYCtrl.Inject(term.K('R', ui.Ctrl))
 	f.TestTTY(t,
 		"~> \n",
-		" HISTORY (dedup on)  ", Styles,
-		"******************** ", term.DotHere,
-		"    Ctrl-D dedup Ctrl-R scope\n", Styles,
-		"    ++++++       ++++++      ",
 		"   2   22ms   2h ago echo\n", Styles,
 		"       vvvv   ////// vvvv",
 		"   3   1.5s   3d ago ls\n", Styles,
 		"       !!!!   ////// vv",
-		"   4                 LS                           ", Styles,
+		"   4                 LS                           \n", Styles,
 		"+++++++++++++++++++++GG+++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  ", Styles,
+		"******************** ", term.DotHere,
+		"    Ctrl-D dedup Ctrl-R scope", Styles,
+		"    ++++++       ++++++      ",
 	)
 
 	evals(f.Evaler, `edit:histlist:toggle-dedup`)
 	f.TestTTY(t,
 		"~> \n",
-		" HISTORY  ", Styles,
-		"********* ", term.DotHere,
-		"               Ctrl-D dedup Ctrl-R scope\n", Styles,
-		"               ++++++       ++++++      ",
 		"   1                 ls\n", Styles,
 		"                     vv",
 		"   2   22ms   2h ago echo\n", Styles,
 		"       vvvv   ////// vvvv",
 		"   3   1.5s   3d ago ls\n", Styles,
 		"       !!!!   ////// vv",
-		"   4                 LS                           ", Styles,
+		"   4                 LS                           \n", Styles,
 		"+++++++++++++++++++++GG+++++++++++++++++++++++++++",
+		" HISTORY  ", Styles,
+		"********* ", term.DotHere,
+		"               Ctrl-D dedup Ctrl-R scope", Styles,
+		"               ++++++       ++++++      ",
 	)
 
 	evals(f.Evaler, `edit:histlist:toggle-dedup`)
@@ -127,26 +127,26 @@ func TestHistlistAddon(t *testing.T) {
 	f.TTYCtrl.Inject(term.K('l'))
 	f.TestTTY(t,
 		"~> \n",
-		" HISTORY (dedup on)  l", Styles,
-		"********************  ", term.DotHere,
-		"   Ctrl-D dedup Ctrl-R scope\n", Styles,
-		"   ++++++       ++++++      ",
 		"   3   1.5s   3d ago ls\n", Styles,
 		"       !!!!   ////// vv",
-		"   4                 LS                           ", Styles,
+		"   4                 LS                           \n", Styles,
 		"+++++++++++++++++++++GG+++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  l", Styles,
+		"********************  ", term.DotHere,
+		"   Ctrl-D dedup Ctrl-R scope", Styles,
+		"   ++++++       ++++++      ",
 	)
 
 	// Filtering is case-sensitive when filter is not all lower case.
 	f.TTYCtrl.Inject(term.K(ui.Backspace), term.K('L'))
 	f.TestTTY(t,
 		"~> \n",
+		"   4                 LS                           \n", Styles,
+		"+++++++++++++++++++++GG+++++++++++++++++++++++++++",
 		" HISTORY (dedup on)  L", Styles,
 		"********************  ", term.DotHere,
-		"   Ctrl-D dedup Ctrl-R scope\n", Styles,
+		"   Ctrl-D dedup Ctrl-R scope", Styles,
 		"   ++++++       ++++++      ",
-		"   4                 LS                           ", Styles,
-		"+++++++++++++++++++++GG+++++++++++++++++++++++++++",
 	)
 }
 
@@ -165,12 +165,12 @@ func TestHistlistAddon_Fuzzy(t *testing.T) {
 	f.TTYCtrl.Inject(term.K('r'), term.K('e'), term.K('b'), term.K('u'), term.K('l'), term.K('d'))
 	f.TestTTY(t,
 		"~> \n",
-		" HISTORY (dedup on)  rebuld", Styles,
-		"********************       ", term.DotHere, "\n",
 		"   1                 nixos-rebuild\n", Styles,
 		"ggggg                vvvvvvvvvvvvv",
-		"   2                 echo rebuld                  ", Styles,
+		"   2                 echo rebuld                  \n", Styles,
 		"+++++++++++++++++++++GGGG+++++++++++++++++++++++++",
+		" HISTORY (dedup on)  rebuld", Styles,
+		"********************       ", term.DotHere,
 	)
 }
 
@@ -192,32 +192,32 @@ func TestHistlistAddon_Scope(t *testing.T) {
 	f.TTYCtrl.Inject(term.K('R', ui.Ctrl))
 	all := f.MakeBuffer(
 		"~> \n",
-		" HISTORY (dedup on)  ", Styles,
-		"******************** ", term.DotHere, "\n",
 		"   1   1.5s   3d ago here\n", Styles,
 		"       vvvv   ////// vvvv",
 		"   2   1.5s   3d ago there\n", Styles,
 		"       vvvv   ////// vvvvv",
-		"   3                 old                          ", Styles,
+		"   3                 old                          \n", Styles,
 		"+++++++++++++++++++++GGG++++++++++++++++++++++++++",
+		" HISTORY (dedup on)  ", Styles,
+		"******************** ", term.DotHere,
 	)
 	f.TTYCtrl.TestBuffer(t, all)
 
 	evals(f.Evaler, "edit:histlist:cycle-scope")
 	f.TestTTY(t,
 		"~> \n",
-		" HISTORY (dedup on) (dir)  ", Styles,
-		"************************** ", term.DotHere, "\n",
-		"   1   1.5s   3d ago here                         ", Styles,
+		"   1   1.5s   3d ago here                         \n", Styles,
 		"+++++++GGGG+++######+GGGG+++++++++++++++++++++++++",
+		" HISTORY (dedup on) (dir)  ", Styles,
+		"************************** ", term.DotHere,
 	)
 	evals(f.Evaler, "edit:histlist:cycle-scope")
 	f.TestTTY(t,
 		"~> \n",
-		" HISTORY (dedup on) (host)  ", Styles,
-		"*************************** ", term.DotHere, "\n",
-		"   1   1.5s   3d ago here                         ", Styles,
+		"   1   1.5s   3d ago here                         \n", Styles,
 		"+++++++GGGG+++######+GGGG+++++++++++++++++++++++++",
+		" HISTORY (dedup on) (host)  ", Styles,
+		"*************************** ", term.DotHere,
 	)
 
 	// Nothing has been run in this session yet.
@@ -234,10 +234,10 @@ func TestHistlistAddon_Scope(t *testing.T) {
 	evals(f.Evaler, "set edit:histlist:scope = host")
 	f.TestTTY(t,
 		"~> \n",
-		" HISTORY (dedup on) (host)  ", Styles,
-		"*************************** ", term.DotHere, "\n",
-		"   1   1.5s   3d ago here                         ", Styles,
+		"   1   1.5s   3d ago here                         \n", Styles,
 		"+++++++GGGG+++######+GGGG+++++++++++++++++++++++++",
+		" HISTORY (dedup on) (host)  ", Styles,
+		"*************************** ", term.DotHere,
 	)
 	evals(f.Evaler, "var scope = $edit:histlist:scope")
 	testGlobal(t, f.Evaler, "scope", "host")

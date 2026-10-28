@@ -570,10 +570,10 @@ func TestAutosuggestion_HiddenInListingMode(t *testing.T) {
 	f.TestTTY(t,
 		"~> echo", Styles,
 		"   vvvv", "\n",
-		" HISTORY (dedup on)  echo", Styles,
-		"********************     ", term.DotHere, "\n",
-		"   1                 echo a                       ", Styles,
+		"   1                 echo a                       \n", Styles,
 		"+++++++++++++++++++++GGGG+++++++++++++++++++++++++",
+		" HISTORY (dedup on)  echo", Styles,
+		"********************     ", term.DotHere,
 	)
 }
 
