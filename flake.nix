@@ -49,7 +49,7 @@
             pname = "elvish";
             inherit version;
             src = ./.;
-            go = pkgs.go;
+            go = pkgs.go_1_27;
             pwd = ./.;
             subPackages = [ "cmd/elvish" ];
             CGO_ENABLED = 0;
@@ -84,7 +84,7 @@
       devShell = forAllSystems ({ system, pkgs }:
         pkgs.mkShell {
           buildInputs = with pkgs; [
-            go
+            go_1_27
             gomod2nix.legacyPackages.${system}.gomod2nix
             gopls
           ];

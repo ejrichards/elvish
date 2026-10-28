@@ -19,13 +19,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu, macos, windows]
-        go-version: [1.23.x]
+        go-version: [1.27.x]
         go-version-is: [new]
-        include:
-          # Test old supported Go version
-          - os: ubuntu
-            go-version: 1.22.x
-            go-version-is: [old]
     env:
       ELVISH_TEST_TIME_SCALE: 20
     runs-on: ${{ matrix.os }}-latest
@@ -80,7 +75,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: 1.23.x
+        go-version: 1.27.x
     - name: Test with emulator
       run: |
         go test ./...
@@ -98,7 +93,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: 1.23.x
+        go-version: 1.27.x
     - name: Run benchmarks
       run: go test -bench=. -run='^$' ./...
 
@@ -147,7 +142,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: 1.23.x
+        go-version: 1.27.x
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -171,7 +166,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: 1.23.x
+        go-version: 1.27.x
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
